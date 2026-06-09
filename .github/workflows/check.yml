@@ -1,0 +1,32 @@
+name: Check
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  syntax:
+    name: JavaScript syntax
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check extension and tool scripts
+        run: |
+          node --check background/service_worker.js
+          node --check content/guard-main.js
+          node --check content/guard-controller.js
+          node --check popup/popup.js
+          node --check options/rules.js
+          node --check tools/action-monitor.mjs
+          node --check tools/harness.mjs
+          node --check tools/install-chrome-for-testing.mjs
+          node --check tools/module-scout.js
+          node --check tools/print-scout-snippet.mjs

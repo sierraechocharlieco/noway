@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>No Way! Rules</title>
+  <link rel="stylesheet" href="rules.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="header">
+      <div>
+        <h1>No Way! Rules</h1>
+        <p>Local training rules and starter packs for each granted site.</p>
+      </div>
+      <div class="actions">
+        <button id="delete-selected" class="danger" type="button" disabled>Delete selected</button>
+        <button id="export-rules" type="button">Export</button>
+        <button id="import-rules" type="button">Import</button>
+        <span id="selected-count" class="selection-count">No rules selected</span>
+        <input id="import-file" type="file" accept="application/json,.json" hidden>
+      </div>
+    </header>
+
+    <section id="origins" class="origins"></section>
+    <p id="message" class="message"></p>
+  </main>
+
+  <div id="raw-editor-modal" class="modal" hidden>
+    <div class="modal-content">
+      <header class="modal-header">
+        <h2>Edit Raw Rule</h2>
+        <button id="close-modal" type="button" class="close-button">&times;</button>
+      </header>
+      <div class="modal-body">
+        <textarea id="raw-json" spellcheck="false"></textarea>
+      </div>
+      <footer class="modal-footer">
+        <button id="save-raw" class="primary" type="button">Save changes</button>
+        <button id="cancel-raw" type="button">Cancel</button>
+      </footer>
+    </div>
+  </div>
+
+  <div id="export-modal" class="modal" hidden>
+    <div class="modal-content">
+      <header class="modal-header">
+        <h2>Export rules</h2>
+        <button id="close-export" type="button" class="close-button">&times;</button>
+      </header>
+      <div class="modal-body export-body">
+        <p class="export-help">Choose which sites to include in the export file.</p>
+        <div class="export-toolbar">
+          <button id="export-select-all" type="button">Select all</button>
+          <button id="export-clear-all" type="button">Clear</button>
+          <span id="export-count" class="export-count">0 selected</span>
+        </div>
+        <div id="export-origins" class="export-origins"></div>
+      </div>
+      <footer class="modal-footer">
+        <button id="export-confirm" class="primary" type="button" disabled>Download JSON</button>
+        <button id="export-cancel" type="button">Cancel</button>
+      </footer>
+    </div>
+  </div>
+
+  <script src="rules.js"></script>
+</body>
+</html>

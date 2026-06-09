@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>No Way!</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header class="header">
+    <img class="logo" src="../icons/no-way-icon-48.png" alt="" aria-hidden="true">
+    <div>
+      <div class="title">No Way!</div>
+      <div class="subtitle">Dynamic site rules</div>
+    </div>
+  </header>
+
+  <section class="status-panel">
+    <div class="status-row">
+      <span class="status-dot" id="status-dot"></span>
+      <span class="status-text" id="status-text">Checking</span>
+    </div>
+    <div class="site-row">
+      <span class="site-label">Current site</span>
+      <span class="site-value" id="current-site">-</span>
+    </div>
+  </section>
+
+  <section class="controls" id="controls">
+    <button class="primary-button" id="grant-access" type="button">Grant Site Access</button>
+
+    <label class="toggle-row">
+      <span>
+        <span class="toggle-title">Training mode</span>
+        <span class="toggle-help">Prompt on risky actions</span>
+      </span>
+      <input id="training-toggle" type="checkbox">
+      <span class="switch" aria-hidden="true"></span>
+    </label>
+
+    <label class="toggle-row">
+      <span>
+        <span class="toggle-title">Protection</span>
+        <span class="toggle-help">Block learned rules</span>
+      </span>
+      <input id="protection-toggle" type="checkbox">
+      <span class="switch" aria-hidden="true"></span>
+    </label>
+
+    <label class="toggle-row sub-toggle">
+      <span>
+        <span class="toggle-title">Allow once in protection</span>
+        <span class="toggle-help">Prompt instead of silently blocking</span>
+      </span>
+      <input id="allow-once-toggle" type="checkbox">
+      <span class="switch" aria-hidden="true"></span>
+    </label>
+
+    <label class="toggle-row sub-toggle">
+      <span>
+        <span class="toggle-title">Debug logging</span>
+        <span class="toggle-help">Console traces for development</span>
+      </span>
+      <input id="debug-toggle" type="checkbox">
+      <span class="switch" aria-hidden="true"></span>
+    </label>
+  </section>
+
+  <p class="sync-status" id="sync-status"></p>
+
+  <section class="rules-summary">
+    <span>Rules on this site</span>
+    <strong id="rule-count">0</strong>
+  </section>
+
+  <section class="actions">
+    <button id="open-rules" type="button">Manage Rules</button>
+    <button id="export-rules" type="button">Export</button>
+    <button id="import-rules" type="button">Import</button>
+    <input id="import-file" type="file" accept="application/json,.json" hidden>
+  </section>
+
+  <p class="message" id="message"></p>
+
+  <script src="popup.js"></script>
+</body>
+</html>

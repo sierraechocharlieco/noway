@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "No Way!",
+  "version": "1.0.0",
+  "description": "Prevents accidental interactions on social media sites during OSINT investigations.",
+  "icons": {
+    "16": "icons/no-way-icon-16.png",
+    "48": "icons/no-way-icon-48.png",
+    "128": "icons/no-way-icon-128.png"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/no-way-icon-16.png",
+      "48": "icons/no-way-icon-48.png"
+    },
+    "default_title": "No Way!"
+  },
+  "background": {
+    "service_worker": "background/service_worker.js"
+  },
+  "options_page": "options/rules.html",
+  "permissions": ["activeTab", "scripting", "storage", "tabs"],
+  "optional_host_permissions": ["http://*/*", "https://*/*"]
+}
