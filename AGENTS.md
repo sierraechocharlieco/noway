@@ -76,7 +76,7 @@ Use `node tools/harness.mjs` for browser-level verification. The harness auto-in
 
 ## Rule Store
 
-Rules are stored in `chrome.storage.local` under `osintGuardRulesV1`.
+Rules are stored in `chrome.storage.local` under `noWayRulesV1`.
 
 Per-origin state contains:
 
@@ -115,7 +115,7 @@ Prompt choices:
 - `Always allow`: stops the current event and saves or enables a learned allow rule.
 - `Allow once`: available from the protection prompt when `protectionAllowOnce` is enabled. It stops the current event, allows the same element fingerprint for 10 seconds, and expects the analyst to click again. Do not replay synthetic clicks.
 
-Rule changes must take effect in already-open same-origin tabs without requiring a reload. Preserve the service-worker refresh path that injects the guard scripts when needed and sends `OSINT_STATE_CHANGED` after training/protection toggles, rule creation, import, update, and delete.
+Rule changes must take effect in already-open same-origin tabs without requiring a reload. Preserve the service-worker refresh path that injects the guard scripts when needed and sends `NOWAY_STATE_CHANGED` after training/protection toggles, rule creation, import, update, and delete.
 
 ## Regex Matching And Confidence
 

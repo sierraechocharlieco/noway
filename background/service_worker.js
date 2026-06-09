@@ -6,12 +6,12 @@ function debugLog(entry) {
   console.log('[No Way!]', JSON.stringify(record));
 }
 
-const STORE_KEY = 'osintGuardRulesV1';
-const DEBUG_KEY = 'osintGuardDebug';
+const STORE_KEY = 'noWayRulesV1';
+const DEBUG_KEY = 'noWayDebug';
 const SCHEMA_VERSION = 1;
 const MAIN_SCRIPT = 'content/guard-main.js';
 const CONTROLLER_SCRIPT = 'content/guard-controller.js';
-const SCRIPT_PREFIX = 'osint-guard';
+const SCRIPT_PREFIX = 'noway';
 
 const LINKEDIN_STARTER_RULES = [
   {
@@ -272,35 +272,35 @@ async function restrictStorageToTrustedContexts() {
 
 async function handleMessage(message = {}, sender = {}) {
   switch (message.type) {
-    case 'OSINT_GET_POPUP_STATE':
+    case 'NOWAY_GET_POPUP_STATE':
       return getPopupState(message.tabUrl);
-    case 'OSINT_SET_ORIGIN_FLAGS':
+    case 'NOWAY_SET_ORIGIN_FLAGS':
       return setOriginFlags(message.origin, {
         trainingEnabled: message.trainingEnabled,
         protectionEnabled: message.protectionEnabled,
         protectionAllowOnce: message.protectionAllowOnce,
       }, message.tabId);
-    case 'OSINT_GET_PAGE_STATE':
+    case 'NOWAY_GET_PAGE_STATE':
       return getPageStateForSender(sender);
-    case 'OSINT_CREATE_RULE':
+    case 'NOWAY_CREATE_RULE':
       return createRuleForSender(sender, message.candidate);
-    case 'OSINT_ALWAYS_ALLOW_RULE':
+    case 'NOWAY_ALWAYS_ALLOW_RULE':
       return allowRuleForSender(sender, message.candidate);
-    case 'OSINT_RECORD_HIT':
+    case 'NOWAY_RECORD_HIT':
       return recordRuleHitForSender(sender, message.ruleId);
-    case 'OSINT_EXPORT_RULES':
+    case 'NOWAY_EXPORT_RULES':
       return exportRules(message.origins);
-    case 'OSINT_IMPORT_RULES':
+    case 'NOWAY_IMPORT_RULES':
       return importRules(message.payload);
-    case 'OSINT_GET_RULES':
+    case 'NOWAY_GET_RULES':
       return getRulesView();
-    case 'OSINT_UPDATE_RULE':
+    case 'NOWAY_UPDATE_RULE':
       return updateRule(message.origin, message.ruleId, message.changes);
-    case 'OSINT_DELETE_RULE':
+    case 'NOWAY_DELETE_RULE':
       return deleteRule(message.origin, message.ruleId);
-    case 'OSINT_DELETE_RULES':
+    case 'NOWAY_DELETE_RULES':
       return deleteRules(message.items);
-    case 'OSINT_SET_DEBUG_FLAG':
+    case 'NOWAY_SET_DEBUG_FLAG':
       return setDebugFlag(Boolean(message.enabled));
     default:
       return { ok: false, error: `Unknown message type: ${String(message.type || '')}` };
@@ -740,7 +740,7 @@ async function syncTabState(tabId, origin, retries = 3) {
     }
 
     try {
-      await chrome.tabs.sendMessage(tabId, { type: 'OSINT_STATE_CHANGED', state });
+      await chrome.tabs.sendMessage(tabId, { type: 'NOWAY_STATE_CHANGED', state });
       debugLog({ stage: 'syncTabState', tabId, attempt, result: 'ok', injected });
       return { tabId, ok: true, injected };
     } catch (error) {
@@ -759,12 +759,12 @@ async function syncTabState(tabId, origin, retries = 3) {
 async function pingTab(tabId, timeoutMs = 400) {
   return new Promise((resolve) => {
     const timer = setTimeout(() => resolve(false), timeoutMs);
-    chrome.tabs.sendMessage(tabId, { type: 'OSINT_PING' }, (response) => {
+    chrome.tabs.sendMessage(tabId, { type: 'NOWAY_PING' }, (response) => {
       clearTimeout(timer);
       if (chrome.runtime.lastError) {
         resolve(false);
       } else {
-        resolve(Boolean(response?.type === 'OSINT_PONG'));
+        resolve(Boolean(response?.type === 'NOWAY_PONG'));
       }
     });
   });

@@ -24,7 +24,7 @@ const els = {
 let exportSelection = new Set();
 
 const KEY_SEPARATOR = '\u001f';
-const FLASH_MESSAGE_KEY = 'osintGuardRulesFlashMessage';
+const FLASH_MESSAGE_KEY = 'noWayRulesFlashMessage';
 
 let view = null;
 let selectedRules = new Set();
@@ -55,7 +55,7 @@ loadRules();
 
 async function loadRules() {
   try {
-    view = await chrome.runtime.sendMessage({ type: 'OSINT_GET_RULES' });
+    view = await chrome.runtime.sendMessage({ type: 'NOWAY_GET_RULES' });
     if (!view?.ok) throw new Error(view?.error || 'Could not load rules');
     render();
     const flashMessage = sessionStorage.getItem(FLASH_MESSAGE_KEY);
@@ -288,7 +288,7 @@ async function saveRawRule() {
 async function updateRule(origin, ruleId, changes) {
   try {
     const response = await chrome.runtime.sendMessage({
-      type: 'OSINT_UPDATE_RULE',
+      type: 'NOWAY_UPDATE_RULE',
       origin,
       ruleId,
       changes,
@@ -306,7 +306,7 @@ async function updateRule(origin, ruleId, changes) {
 async function deleteRule(origin, ruleId) {
   try {
     const response = await chrome.runtime.sendMessage({
-      type: 'OSINT_DELETE_RULE',
+      type: 'NOWAY_DELETE_RULE',
       origin,
       ruleId,
     });
@@ -329,7 +329,7 @@ async function deleteSelectedRules() {
 
   try {
     const response = await chrome.runtime.sendMessage({
-      type: 'OSINT_DELETE_RULES',
+      type: 'NOWAY_DELETE_RULES',
       items,
     });
     if (!response?.ok) throw new Error(response?.error || 'Delete failed');
@@ -408,7 +408,7 @@ async function performExport() {
   const all = origins.length === Object.keys(view?.origins || {}).length;
   try {
     const response = await chrome.runtime.sendMessage({
-      type: 'OSINT_EXPORT_RULES',
+      type: 'NOWAY_EXPORT_RULES',
       origins: all ? undefined : origins,
     });
     if (!response?.ok) throw new Error(response?.error || 'Export failed');
@@ -445,7 +445,7 @@ async function importRules() {
 
   try {
     const payload = JSON.parse(await file.text());
-    const response = await chrome.runtime.sendMessage({ type: 'OSINT_IMPORT_RULES', payload });
+    const response = await chrome.runtime.sendMessage({ type: 'NOWAY_IMPORT_RULES', payload });
     if (!response?.ok) throw new Error(response?.error || 'Import failed');
     view = response;
     render();

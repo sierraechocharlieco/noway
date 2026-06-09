@@ -1,20 +1,20 @@
 (async () => {
   'use strict';
 
-  if (window.__OSINT_GUARD_CONTROLLER_INSTALLED__) {
+  if (window.__NOWAY_CONTROLLER_INSTALLED__) {
     try {
-      await chrome.runtime.sendMessage({ type: 'OSINT_PING' });
+      await chrome.runtime.sendMessage({ type: 'NOWAY_PING' });
       return;
     } catch (_) {
-      window.__OSINT_GUARD_CONTROLLER_INSTALLED__ = false;
+      window.__NOWAY_CONTROLLER_INSTALLED__ = false;
     }
   }
-  window.__OSINT_GUARD_CONTROLLER_INSTALLED__ = true;
+  window.__NOWAY_CONTROLLER_INSTALLED__ = true;
 
-  const SOURCE_MAIN = 'OSINT_GUARD_MAIN';
-  const SOURCE_CONTROLLER = 'OSINT_GUARD_CONTROLLER';
-  const BADGE_ID = 'osint-guard-badge';
-  const PROMPT_ID = 'osint-guard-training-prompt';
+  const SOURCE_MAIN = 'NOWAY_MAIN';
+  const SOURCE_CONTROLLER = 'NOWAY_CONTROLLER';
+  const BADGE_ID = 'noway-badge';
+  const PROMPT_ID = 'noway-training-prompt';
   const TOAST_HIDE_DELAY_MS = 5200;
 
   let currentState = {
@@ -41,23 +41,23 @@
     const data = event.data;
     if (!data || data.source !== SOURCE_MAIN) return;
 
-    if (data.type === 'OSINT_GUARD_READY') {
+    if (data.type === 'NOWAY_READY') {
       if (stateInitialized) pushStateToMain();
-    } else if (data.type === 'OSINT_GUARD_NAVIGATED') {
+    } else if (data.type === 'NOWAY_NAVIGATED') {
       removePrompt();
-    } else if (data.type === 'OSINT_GUARD_PROMPT') {
+    } else if (data.type === 'NOWAY_PROMPT') {
       if (window !== window.top) {
-        window.top.postMessage({ source: SOURCE_CONTROLLER, type: 'OSINT_DELEGATE_UI', payload: data }, '*');
+        window.top.postMessage({ source: SOURCE_CONTROLLER, type: 'NOWAY_DELEGATE_UI', payload: data }, '*');
       } else {
         showPrompt(data.payload?.candidate, data.payload?.mode, data.payload?.matchingRule);
       }
-    } else if (data.type === 'OSINT_GUARD_BLOCKED') {
+    } else if (data.type === 'NOWAY_BLOCKED') {
       if (window !== window.top) {
-        window.top.postMessage({ source: SOURCE_CONTROLLER, type: 'OSINT_DELEGATE_UI', payload: data }, '*');
+        window.top.postMessage({ source: SOURCE_CONTROLLER, type: 'NOWAY_DELEGATE_UI', payload: data }, '*');
       } else {
         showToast(`Action stopped: ${data.payload?.label || 'Blocked action'}`, 'blocked');
       }
-    } else if (data.type === 'OSINT_GUARD_RULE_HIT') {
+    } else if (data.type === 'NOWAY_RULE_HIT') {
       recordRuleHit(data.payload?.ruleId);
     }
   });
@@ -65,23 +65,23 @@
   // Handle delegated UI requests from iframes
   window.addEventListener('message', (event) => {
     const data = event.data;
-    if (!data || data.source !== SOURCE_CONTROLLER || data.type !== 'OSINT_DELEGATE_UI') return;
+    if (!data || data.source !== SOURCE_CONTROLLER || data.type !== 'NOWAY_DELEGATE_UI') return;
     if (window !== window.top) return; // Only the top window handles delegates
 
     const original = data.payload;
-    if (original.type === 'OSINT_GUARD_PROMPT') {
+    if (original.type === 'NOWAY_PROMPT') {
       showPrompt(original.payload?.candidate, original.payload?.mode, original.payload?.matchingRule);
-    } else if (original.type === 'OSINT_GUARD_BLOCKED') {
+    } else if (original.type === 'NOWAY_BLOCKED') {
       showToast(`Action stopped: ${original.payload?.label || 'Blocked action'}`, 'blocked');
     }
   });
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message?.type === 'OSINT_PING') {
-      sendResponse({ type: 'OSINT_PONG' });
+    if (message?.type === 'NOWAY_PING') {
+      sendResponse({ type: 'NOWAY_PONG' });
       return true;
     }
-    if (message?.type !== 'OSINT_STATE_CHANGED') return;
+    if (message?.type !== 'NOWAY_STATE_CHANGED') return;
     if (message.state?.ok) {
       applyPageState(message.state);
     } else {
@@ -123,8 +123,8 @@
     }, 300);
   }
 
-  if (!window.__OSINT_GUARD_CTRL_HISTORY_PATCHED__) {
-    window.__OSINT_GUARD_CTRL_HISTORY_PATCHED__ = true;
+  if (!window.__NOWAY_CTRL_HISTORY_PATCHED__) {
+    window.__NOWAY_CTRL_HISTORY_PATCHED__ = true;
     const originalPushState = history.pushState;
     const originalReplaceState = history.replaceState;
     history.pushState = function (...args) {
@@ -162,7 +162,7 @@
       return;
     }
     try {
-      const response = await chrome.runtime.sendMessage({ type: 'OSINT_GET_PAGE_STATE' });
+      const response = await chrome.runtime.sendMessage({ type: 'NOWAY_GET_PAGE_STATE' });
       if (!response?.ok) throw new Error(response?.error || 'State unavailable');
       applyPageState(response);
     } catch (error) {
@@ -188,7 +188,7 @@
 
     // If both modes are off, tell the main-world script to tear down capture listeners
     if (!currentState.trainingEnabled && !currentState.protectionEnabled) {
-      postToMain('OSINT_GUARD_SHUTDOWN', {});
+      postToMain('NOWAY_SHUTDOWN', {});
     }
   }
 
@@ -294,7 +294,7 @@
     } else {
       const allowOnce = promptButton('Allow once', theme, false);
       allowOnce.addEventListener('click', () => {
-        postToMain('OSINT_GUARD_ALLOW_ONCE', { fingerprint: candidate.fingerprint });
+        postToMain('NOWAY_ALLOW_ONCE', { fingerprint: candidate.fingerprint });
         removePrompt();
         showToast('Allowed once. Click again within 10 seconds.', 'allowed');
       });
@@ -322,7 +322,7 @@
   async function confirmBlock(matchingRule) {
     debugLog({ stage: 'confirmBlock', ruleId: matchingRule.id, label: matchingRule.label });
     try {
-      await chrome.runtime.sendMessage({ type: 'OSINT_RECORD_HIT', ruleId: matchingRule.id });
+      await chrome.runtime.sendMessage({ type: 'NOWAY_RECORD_HIT', ruleId: matchingRule.id });
     } catch (error) {
       debugLog({ stage: 'confirmBlock', result: 'hit-error', error: error.message });
     }
@@ -334,7 +334,7 @@
     debugLog({ stage: 'createRule', label: candidate.label, actionKey: candidate.actionKey });
     try {
       const response = await chrome.runtime.sendMessage({
-        type: 'OSINT_CREATE_RULE',
+        type: 'NOWAY_CREATE_RULE',
         candidate,
       });
       if (!response?.ok) throw new Error(response?.error || 'Rule was not saved');
@@ -356,7 +356,7 @@
     debugLog({ stage: 'allowRule', label: candidate.label, actionKey: candidate.actionKey });
     try {
       const response = await chrome.runtime.sendMessage({
-        type: 'OSINT_ALWAYS_ALLOW_RULE',
+        type: 'NOWAY_ALWAYS_ALLOW_RULE',
         candidate,
       });
       if (!response?.ok) throw new Error(response?.error || 'Rule was not saved');
@@ -377,7 +377,7 @@
   async function recordRuleHit(ruleId) {
     if (!ruleId) return;
     try {
-      await chrome.runtime.sendMessage({ type: 'OSINT_RECORD_HIT', ruleId });
+      await chrome.runtime.sendMessage({ type: 'NOWAY_RECORD_HIT', ruleId });
     } catch (_) {}
   }
 
@@ -433,7 +433,7 @@
     const theme = getTheme(kind);
 
     const toast = document.createElement('div');
-    toast.setAttribute('data-osint-toast', '');
+    toast.setAttribute('data-noway-toast', '');
     toast.style.cssText = [
       'all:initial',
       'position:fixed',
@@ -491,7 +491,7 @@
   }
 
   function pushStateToMain() {
-    postToMain('OSINT_GUARD_STATE', currentState);
+    postToMain('NOWAY_STATE', currentState);
   }
 
   function postToMain(type, payload) {

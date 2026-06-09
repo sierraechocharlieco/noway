@@ -52,7 +52,7 @@ if (!chromeResolution.path) {
 
 const chromePath = chromeResolution.path;
 
-const tempParent = seedProfile ? null : await mkdtemp(resolve(tmpdir(), 'osint-guard-'));
+const tempParent = seedProfile ? null : await mkdtemp(resolve(tmpdir(), 'noway-'));
 const userDataDir = seedProfile || resolve(tempParent, 'profile');
 
 if (seedProfile) {
@@ -274,7 +274,7 @@ function installLocalChromeForTesting() {
 function resolveChromeForTesting(explicitPath) {
   const configuredCandidates = [
     ['--chrome', explicitPath],
-    ['OSINT_GUARD_CHROME', process.env.OSINT_GUARD_CHROME],
+    ['NOWAY_CHROME', process.env.NOWAY_CHROME],
   ].filter(([, candidate]) => Boolean(candidate));
 
   for (const [source, candidate] of configuredCandidates) {

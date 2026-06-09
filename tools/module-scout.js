@@ -160,12 +160,12 @@
     return json;
   }
 
-  window.OSINTModuleScout = {
+  window.NoWayModuleScout = {
     scan,
     copyJson,
     blockedSelectorDraft,
     selectorCandidates,
   };
 
-  console.log('OSINTModuleScout ready. Try: OSINTModuleScout.scan() or OSINTModuleScout.blockedSelectorDraft(["like", "follow", "comment", "share", "send"])');
+  console.log('NoWayModuleScout ready. Try: NoWayModuleScout.scan() or NoWayModuleScout.blockedSelectorDraft(["like", "follow", "comment", "share", "send"])');
 })();

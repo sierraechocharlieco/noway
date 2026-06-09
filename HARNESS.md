@@ -64,8 +64,8 @@ node tools/print-scout-snippet.mjs
 Then run:
 
 ```js
-OSINTModuleScout.scan()
-OSINTModuleScout.blockedSelectorDraft(['like', 'follow', 'comment', 'share', 'send'])
+NoWayModuleScout.scan()
+NoWayModuleScout.blockedSelectorDraft(['like', 'follow', 'comment', 'share', 'send'])
 ```
 
 The scout reports visible interactive controls, ARIA labels, roles, text, geometry, and selector candidates. Use those results to refine starter rules in `background/service_worker.js` or to compare against dynamically learned rules from training mode.

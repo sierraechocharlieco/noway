@@ -143,7 +143,7 @@ async function attachTarget(target) {
       return;
     }
 
-    if (message.method === 'Runtime.bindingCalled' && message.params.name === '__osintActionMonitor') {
+    if (message.method === 'Runtime.bindingCalled' && message.params.name === '__noWayActionMonitor') {
       try {
         const payload = JSON.parse(message.params.payload);
         payload.targetUrl = target.url;
@@ -172,7 +172,7 @@ async function attachTarget(target) {
   await send(state, 'Runtime.enable');
   await send(state, 'Page.enable');
   await send(state, 'Console.enable');
-  await send(state, 'Runtime.addBinding', { name: '__osintActionMonitor' });
+  await send(state, 'Runtime.addBinding', { name: '__noWayActionMonitor' });
   await send(state, 'Page.addScriptToEvaluateOnNewDocument', { source: monitorSource() });
   await send(state, 'Runtime.evaluate', { expression: monitorSource(), awaitPromise: true });
 
@@ -229,8 +229,8 @@ function monitorSource() {
 (() => {
   'use strict';
 
-  if (window.__OSINT_ACTION_MONITOR_INSTALLED__) return;
-  window.__OSINT_ACTION_MONITOR_INSTALLED__ = true;
+  if (window.__NOWAY_ACTION_MONITOR_INSTALLED__) return;
+  window.__NOWAY_ACTION_MONITOR_INSTALLED__ = true;
 
   const ATTRS = [
     'aria-label',
@@ -327,7 +327,7 @@ function monitorSource() {
   }
 
   function currentBlockedState() {
-    const toasts = [...document.querySelectorAll('[data-osint-toast]')];
+    const toasts = [...document.querySelectorAll('[data-noway-toast]')];
     const latestToast = toasts.at(-1);
     return {
       blocked: Boolean(latestToast),
@@ -362,7 +362,7 @@ function monitorSource() {
       blockedLabel: blockedState.blockedLabel,
     };
 
-    window.__osintActionMonitor(JSON.stringify(payload));
+    window.__noWayActionMonitor(JSON.stringify(payload));
   }
 
   document.addEventListener('pointerdown', (event) => {

@@ -1,11 +1,11 @@
 (() => {
   'use strict';
 
-  const wasAlreadyInstalled = window.__OSINT_GUARD_MAIN_INSTALLED__;
-  window.__OSINT_GUARD_MAIN_INSTALLED__ = true;
+  const wasAlreadyInstalled = window.__NOWAY_MAIN_INSTALLED__;
+  window.__NOWAY_MAIN_INSTALLED__ = true;
 
-  const SOURCE_MAIN = 'OSINT_GUARD_MAIN';
-  const SOURCE_CONTROLLER = 'OSINT_GUARD_CONTROLLER';
+  const SOURCE_MAIN = 'NOWAY_MAIN';
+  const SOURCE_CONTROLLER = 'NOWAY_CONTROLLER';
   const ACTION_SELECTOR = [
     'button',
     'a[href]',
@@ -40,11 +40,11 @@
   // Debug ring buffer: last 50 internal decisions for easy DevTools inspection.
   // Writes pause when debug mode is off.
   const DEBUG_MAX_EVENTS = 50;
-  window.__OSINT_GUARD_DEBUG__ = window.__OSINT_GUARD_DEBUG__ || { events: [] };
+  window.__NOWAY_DEBUG__ = window.__NOWAY_DEBUG__ || { events: [] };
   function debugLog(entry) {
     if (!state.debugEnabled) return;
     const record = { time: Date.now(), ...entry };
-    const buf = window.__OSINT_GUARD_DEBUG__.events;
+    const buf = window.__NOWAY_DEBUG__.events;
     buf.push(record);
     if (buf.length > DEBUG_MAX_EVENTS) buf.shift();
     // Also emit to console with a consistent prefix so CDP/ action-monitor can capture it
@@ -193,16 +193,16 @@
     const data = event.data;
     if (!data || data.source !== SOURCE_CONTROLLER) return;
 
-    if (data.type === 'OSINT_GUARD_STATE') {
+    if (data.type === 'NOWAY_STATE') {
       applyState(data.payload);
       if (!isMainActive && (state.trainingEnabled || state.protectionEnabled)) {
         installGuards();
       } else if (isMainActive && !state.trainingEnabled && !state.protectionEnabled) {
         uninstallGuards();
       }
-    } else if (data.type === 'OSINT_GUARD_ALLOW_ONCE') {
+    } else if (data.type === 'NOWAY_ALLOW_ONCE') {
       allowOnce(data.payload?.fingerprint);
-    } else if (data.type === 'OSINT_GUARD_SHUTDOWN') {
+    } else if (data.type === 'NOWAY_SHUTDOWN') {
       uninstallGuards();
     }
   });
@@ -210,7 +210,7 @@
   function installGuards() {
     if (isMainActive) return;
     isMainActive = true;
-    window.__OSINT_GUARD_MAIN_ACTIVE__ = true;
+    window.__NOWAY_MAIN_ACTIVE__ = true;
 
     const onPointerDown = (event) => handleActivation(event, 'pointer');
     const onMouseDown = (event) => handleActivation(event, 'pointer');
@@ -238,13 +238,13 @@
     document.addEventListener('keydown', onKeydown, true);
     document.addEventListener('submit', onSubmit, true);
 
-    post('OSINT_GUARD_READY', { origin: location.origin });
+    post('NOWAY_READY', { origin: location.origin });
   }
 
   function uninstallGuards() {
     if (!isMainActive) return;
     isMainActive = false;
-    window.__OSINT_GUARD_MAIN_ACTIVE__ = false;
+    window.__NOWAY_MAIN_ACTIVE__ = false;
     for (const { type, listener, capture } of listenerRefs) {
       document.removeEventListener(type, listener, capture);
     }
@@ -261,18 +261,18 @@
   function onMainNav() {
     clearTimeout(mainNavTimeout);
     mainNavTimeout = setTimeout(() => {
-      post('OSINT_GUARD_READY', { origin: location.origin });
-      post('OSINT_GUARD_NAVIGATED', {});
+      post('NOWAY_READY', { origin: location.origin });
+      post('NOWAY_NAVIGATED', {});
     }, 300);
   }
 
-  if (!wasAlreadyInstalled || !window.__OSINT_GUARD_MAIN_ACTIVE__) {
+  if (!wasAlreadyInstalled || !window.__NOWAY_MAIN_ACTIVE__) {
     installGuards();
   }
 
   // Monkey-patch history only once, even if the script is re-injected.
-  if (!window.__OSINT_GUARD_HISTORY_PATCHED__) {
-    window.__OSINT_GUARD_HISTORY_PATCHED__ = true;
+  if (!window.__NOWAY_HISTORY_PATCHED__) {
+    window.__NOWAY_HISTORY_PATCHED__ = true;
     const _originalPushState = history.pushState;
     const _originalReplaceState = history.replaceState;
     history.pushState = function (...args) {
@@ -398,7 +398,7 @@
 
       recentPromptAtByFingerprint.set(candidate.fingerprint, Date.now());
       debugLog({ stage: 'decision', decision: 'prompt', label: candidate.label, actionKey: candidate.actionKey });
-      post('OSINT_GUARD_PROMPT', {
+      post('NOWAY_PROMPT', {
         candidate: serializeCandidate(candidate),
         mode: 'training',
       });
@@ -416,7 +416,7 @@
         }
         recentPromptAtByFingerprint.set(candidate.fingerprint, Date.now());
         debugLog({ stage: 'decision', decision: 'prompt-protection', label: candidate.label, ruleId: matchingRule.id });
-        post('OSINT_GUARD_PROMPT', {
+        post('NOWAY_PROMPT', {
           candidate: serializeCandidate(candidate),
           mode: 'protection-allow-once',
           matchingRule: { id: matchingRule.id, label: matchingRule.label },
@@ -431,7 +431,7 @@
       }
       recentBlockAtByFingerprint.set(candidate.fingerprint, Date.now());
       debugLog({ stage: 'decision', decision: 'block', ruleId: matchingRule.id, label: matchingRule.label });
-      post('OSINT_GUARD_BLOCKED', {
+      post('NOWAY_BLOCKED', {
         label: matchingRule.label || candidate.label,
         ruleId: matchingRule.id,
       });
@@ -802,7 +802,7 @@
     const now = Date.now();
     if (now - (recentHitAtByRuleId.get(ruleId) || 0) < HIT_DEDUPE_MS) return;
     recentHitAtByRuleId.set(ruleId, now);
-    post('OSINT_GUARD_RULE_HIT', { ruleId });
+    post('NOWAY_RULE_HIT', { ruleId });
   }
 
   function isAllowed(fingerprint) {

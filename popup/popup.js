@@ -65,7 +65,7 @@ async function refresh() {
   try {
     currentTab = await getActiveTab();
     currentState = await chrome.runtime.sendMessage({
-      type: 'OSINT_GET_POPUP_STATE',
+      type: 'NOWAY_GET_POPUP_STATE',
       tabUrl: tabUrl(currentTab),
     });
     render();
@@ -178,7 +178,7 @@ async function setFlags(flags) {
   els.syncStatus.textContent = 'Syncing…';
   try {
     const response = await chrome.runtime.sendMessage({
-      type: 'OSINT_SET_ORIGIN_FLAGS',
+      type: 'NOWAY_SET_ORIGIN_FLAGS',
       origin: currentState.origin,
       tabId: currentTab?.id,
       ...flags,
@@ -209,7 +209,7 @@ async function setDebugFlag(enabled) {
   setBusy(true);
   try {
     const response = await chrome.runtime.sendMessage({
-      type: 'OSINT_SET_DEBUG_FLAG',
+      type: 'NOWAY_SET_DEBUG_FLAG',
       enabled,
     });
     if (!response?.ok) throw new Error(response?.error || 'Could not update debug flag');
@@ -234,7 +234,7 @@ async function syncCurrentFlags() {
   if (!currentState?.origin) return;
   const originState = currentState.originState || {};
   await chrome.runtime.sendMessage({
-    type: 'OSINT_SET_ORIGIN_FLAGS',
+    type: 'NOWAY_SET_ORIGIN_FLAGS',
     origin: currentState.origin,
     tabId: currentTab?.id,
     trainingEnabled: Boolean(originState.trainingEnabled),
@@ -250,7 +250,7 @@ async function importRules() {
 
   try {
     const payload = JSON.parse(await file.text());
-    const response = await chrome.runtime.sendMessage({ type: 'OSINT_IMPORT_RULES', payload });
+    const response = await chrome.runtime.sendMessage({ type: 'NOWAY_IMPORT_RULES', payload });
     if (!response?.ok) throw new Error(response?.error || 'Import failed');
     setMessage('Rules imported.');
     await refresh();
