@@ -64,6 +64,8 @@ The harness installs Chrome for Testing on first use when no compatible binary i
 
 There is no build step and no package manager install is required.
 
+The development tools require Node.js 22 or later and run on macOS, Linux, and Windows 10+. Extracting the Chrome for Testing archive uses `unzip` on macOS and Linux (preinstalled on macOS) and `tar` on Windows (preinstalled on Windows 10+).
+
 Run syntax checks after editing JavaScript:
 
 ```sh

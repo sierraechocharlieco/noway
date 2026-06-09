@@ -49,7 +49,7 @@ await downloadFile(download.url, zipPath);
 
 console.log(`Extracting to ${installDir}`);
 await mkdir(installDir, { recursive: true });
-await run('unzip', ['-q', zipPath, '-d', installDir]);
+await extractZip(zipPath, installDir);
 
 if (!existsSync(executable)) {
   console.error(`Installed archive did not contain expected executable: ${executable}`);
@@ -74,6 +74,9 @@ function detectPlatform() {
   if (platform() === 'darwin' && arch() === 'arm64') return 'mac-arm64';
   if (platform() === 'darwin' && arch() === 'x64') return 'mac-x64';
   if (platform() === 'linux' && arch() === 'x64') return 'linux64';
+  // No native ARM Windows build exists; win64 runs under emulation on ARM devices.
+  if (platform() === 'win32' && (arch() === 'x64' || arch() === 'arm64')) return 'win64';
+  if (platform() === 'win32' && arch() === 'ia32') return 'win32';
   return null;
 }
 
@@ -84,6 +87,8 @@ function resolveExecutable(root, targetPlatform) {
   if (targetPlatform === 'mac-x64') {
     return resolve(root, 'chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
   }
+  if (targetPlatform === 'win64') return resolve(root, 'chrome-win64/chrome.exe');
+  if (targetPlatform === 'win32') return resolve(root, 'chrome-win32/chrome.exe');
   return resolve(root, 'chrome-linux64/chrome');
 }
 
@@ -99,10 +104,24 @@ async function downloadFile(url, destination) {
   await pipeline(response.body, createWriteStream(destination));
 }
 
+function extractZip(archivePath, destination) {
+  // Windows 10+ ships bsdtar, which reads zip archives; macOS and Linux ship unzip.
+  const [command, args] = platform() === 'win32'
+    ? ['tar', ['-xf', archivePath, '-C', destination]]
+    : ['unzip', ['-q', archivePath, '-d', destination]];
+  return run(command, args);
+}
+
 function run(command, args) {
   return new Promise((resolveRun, rejectRun) => {
     const child = spawn(command, args, { stdio: 'inherit' });
-    child.on('error', rejectRun);
+    child.on('error', (error) => {
+      if (error.code === 'ENOENT') {
+        rejectRun(new Error(`${command} is not installed or not on PATH; it is required to extract the Chrome for Testing archive`));
+      } else {
+        rejectRun(error);
+      }
+    });
     child.on('exit', (code) => {
       if (code === 0) resolveRun();
       else rejectRun(new Error(`${command} exited with ${code}`));

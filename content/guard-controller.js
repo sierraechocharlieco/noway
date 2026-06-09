@@ -26,6 +26,10 @@
   };
   let stateInitialized = false;
   let toastOffset = 16;
+  // Declared before teardown() can run; it may be called before the timers below are set up.
+  let refreshRetryTimer = null;
+  let navTimeout = null;
+  let periodicRefreshId = null;
 
   function debugLog(entry) {
     if (!currentState.debugEnabled) return;
@@ -93,6 +97,7 @@
     debugLog({ stage: 'teardown', reason });
     clearTimeout(refreshRetryTimer);
     clearTimeout(navTimeout);
+    clearInterval(periodicRefreshId);
     removePrompt();
     const badge = document.getElementById(BADGE_ID);
     badge?.remove();
@@ -109,7 +114,6 @@
   refreshState();
 
   // SPA navigation detection: re-fetch state after route changes
-  let navTimeout = null;
   function onNav() {
     clearTimeout(navTimeout);
     navTimeout = setTimeout(() => {
@@ -143,7 +147,7 @@
   });
 
   // Periodic refresh for long-lived tabs
-  const periodicRefreshId = setInterval(() => {
+  periodicRefreshId = setInterval(() => {
     if (!isExtensionContextValid()) {
       clearInterval(periodicRefreshId);
       teardown('context-invalidated');
@@ -152,7 +156,6 @@
     refreshState();
   }, 30000);
 
-  let refreshRetryTimer = null;
   async function refreshState() {
     if (!isExtensionContextValid()) {
       teardown('context-invalidated');

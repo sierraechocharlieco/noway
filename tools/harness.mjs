@@ -186,7 +186,12 @@ function sendBrowserClose(browserUrl) {
     });
 
     ws.addEventListener('message', (event) => {
-      const message = JSON.parse(event.data);
+      let message;
+      try {
+        message = JSON.parse(event.data);
+      } catch (_) {
+        return;
+      }
       if (message.id === 1) {
         clearTimeout(timeout);
         ws.close();
@@ -344,6 +349,9 @@ function detectChromeForTestingPlatform() {
   if (platform() === 'darwin' && arch() === 'arm64') return 'mac-arm64';
   if (platform() === 'darwin' && arch() === 'x64') return 'mac-x64';
   if (platform() === 'linux' && arch() === 'x64') return 'linux64';
+  // No native ARM Windows build exists; win64 runs under emulation on ARM devices.
+  if (platform() === 'win32' && (arch() === 'x64' || arch() === 'arm64')) return 'win64';
+  if (platform() === 'win32' && arch() === 'ia32') return 'win32';
   return null;
 }
 
@@ -354,6 +362,8 @@ function chromeForTestingExecutableSuffix(targetPlatform) {
   if (targetPlatform === 'mac-x64') {
     return 'chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing';
   }
+  if (targetPlatform === 'win64') return 'chrome-win64/chrome.exe';
+  if (targetPlatform === 'win32') return 'chrome-win32/chrome.exe';
   return 'chrome-linux64/chrome';
 }
 
@@ -362,6 +372,10 @@ function systemChromeForTestingCandidates(targetPlatform) {
     return [
       '/Applications/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing',
     ];
+  }
+
+  if (targetPlatform.startsWith('win')) {
+    return [];
   }
 
   return [
@@ -379,6 +393,8 @@ function isChromeForTestingPath(candidate) {
     || normalized.includes('/chrome-mac-x64/Google Chrome for Testing.app/')
     || normalized.includes('/Google Chrome for Testing.app/')
     || normalized.endsWith('/chrome-linux64/chrome')
+    || normalized.endsWith('/chrome-win64/chrome.exe')
+    || normalized.endsWith('/chrome-win32/chrome.exe')
     || normalized.endsWith('/chrome-for-testing');
 }
 

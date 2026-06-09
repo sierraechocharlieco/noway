@@ -12,7 +12,9 @@ You can also preinstall or refresh it manually:
 node tools/install-chrome-for-testing.mjs
 ```
 
-The harness will pick the macOS or Linux binary automatically. It also detects Chrome for Testing installed by `npx @puppeteer/browsers install chrome@stable` under `chrome/`. It does not fall back to regular Chrome or Chromium.
+The harness will pick the macOS, Linux, or Windows binary automatically. It also detects Chrome for Testing installed by `npx @puppeteer/browsers install chrome@stable` under `chrome/`. It does not fall back to regular Chrome or Chromium.
+
+The tools require Node.js 22 or later. Extracting the downloaded archive uses `unzip` on macOS and Linux and `tar` on Windows 10+; both are preinstalled on macOS and Windows, while some Linux distributions need `unzip` installed from their package manager.
 
 ## 1. Create a logged-in seed profile
 

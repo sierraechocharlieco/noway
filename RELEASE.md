@@ -8,7 +8,7 @@ Use this checklist before the first public MIT release.
 - Do not publish the current private history with local machine author emails or old path churn.
 - Confirm `.harness/*` remains ignored and only `.harness/.gitkeep` is tracked.
 - Confirm icons and other assets are owned by Sierra Echo Charlie or are otherwise safe to publish under this repository's MIT licence.
-- Confirm no canonical repository URL is referenced until public hosting is decided.
+- Confirm the canonical repository URL (https://github.com/sierraechocharlieco/noway) is correct in `manifest.json` (`homepage_url`) and `SECURITY.md`.
 - Confirm the README prominently states that this is a vibe-coded experiment, developer-mode only, not a production release, and not a complete safety boundary.
 
 ## Validation

@@ -112,7 +112,12 @@ async function attachTarget(target) {
   attachedTargets.set(target.id, state);
 
   state.ws.addEventListener('message', (event) => {
-    const message = JSON.parse(event.data);
+    let message;
+    try {
+      message = JSON.parse(event.data);
+    } catch (_) {
+      return;
+    }
 
     if (message.id && state.pending.has(message.id)) {
       state.pending.get(message.id)(message);
@@ -139,18 +144,24 @@ async function attachTarget(target) {
     }
 
     if (message.method === 'Runtime.bindingCalled' && message.params.name === '__osintActionMonitor') {
-      const payload = JSON.parse(message.params.payload);
-      payload.targetUrl = target.url;
-      if (json) {
-        console.log(JSON.stringify(payload));
-      } else {
-        printEvent(payload);
-      }
+      try {
+        const payload = JSON.parse(message.params.payload);
+        payload.targetUrl = target.url;
+        if (json) {
+          console.log(JSON.stringify(payload));
+        } else {
+          printEvent(payload);
+        }
+      } catch (_) {}
     }
   });
 
   state.ws.addEventListener('close', () => {
     attachedTargets.delete(target.id);
+  });
+
+  state.ws.addEventListener('error', () => {
+    console.error(`DevTools connection error for ${target.url}; will reattach if the page is still open.`);
   });
 
   await new Promise((resolveOpen, rejectOpen) => {

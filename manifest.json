@@ -3,6 +3,7 @@
   "name": "No Way!",
   "version": "1.0.0",
   "description": "Prevents accidental interactions on social media sites during OSINT investigations.",
+  "homepage_url": "https://github.com/sierraechocharlieco/noway",
   "icons": {
     "16": "icons/no-way-icon-16.png",
     "48": "icons/no-way-icon-48.png",
