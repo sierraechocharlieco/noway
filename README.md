@@ -6,7 +6,7 @@ It is designed for cautious browsing on sites where a stray click can like, foll
 
 ## Demo
 
-[<img src="https://img.youtube.com/vi/LKWsLTG0D7E/hqdefault.jpg" alt="Watch the No Way! demo" width="600" height="300">](https://www.youtube.com/embed/LKWsLTG0D7E)
+[<img src="https://img.youtube.com/vi/LKWsLTG0D7E/maxresdefault.jpg" alt="Watch the No Way! demo" width="600">](https://www.youtube.com/watch?v=LKWsLTG0D7E)
 
 ## Project Status
 
