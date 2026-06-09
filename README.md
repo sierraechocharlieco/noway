@@ -6,7 +6,7 @@ It is designed for cautious browsing on sites where a stray click can like, foll
 
 ## Demo
 
-[![Watch the No Way! demo](https://img.youtube.com/vi/LKWsLTG0D7E/hqdefault.jpg)](https://youtu.be/LKWsLTG0D7E)
+<iframe width="560" height="315" src="https://www.youtube.com/embed/LKWsLTG0D7E" title="No Way! demo" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
 
 ## Project Status
 
