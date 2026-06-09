@@ -4,6 +4,10 @@ No Way! is a Manifest V3 Chrome extension from [Sierra Echo Charlie](https://sie
 
 It is designed for cautious browsing on sites where a stray click can like, follow, connect, comment, share, message, save, delete, purchase, or otherwise change state. Analysts grant access to one origin at a time, train risky actions locally, and then use protection mode to block matching actions.
 
+## Demo
+
+[![Watch the No Way! demo](https://img.youtube.com/vi/LKWsLTG0D7E/hqdefault.jpg)](https://youtu.be/LKWsLTG0D7E)
+
 ## Project Status
 
 No Way! is being open sourced as part of an experiment series about what vibe coding can and cannot produce. It is a developer-mode Chrome extension, not a production release, and it has not been designed, reviewed, or packaged as a production safety product.
