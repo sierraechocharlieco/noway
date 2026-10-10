@@ -107,7 +107,7 @@ try {
   const activationCount = await page.evaluate(() => window.__NOWAY_DEBUG__.events.filter((e) => e.stage === 'activation').length);
   await popup.evaluate(async (url) => {
     const [tab] = await chrome.tabs.query({ url: `${new URL(url).origin}/*` });
-    for (let repeat = 0; repeat < 2; repeat++) await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['shared/auto-main.js', 'content/guard-main.js'], world: 'MAIN' });
+    for (let repeat = 0; repeat < 2; repeat++) await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['shared/auto.js', 'content/guard-main.js'], world: 'MAIN' });
   }, url);
   await page.evaluate(() => { window.__NOWAY_DEBUG__.events = []; });
   await page.locator('[data-testid=follow]').click();
@@ -223,6 +223,18 @@ try {
   await secondPage.goto(url);
   await secondPage.getByText('No Way! · Protection', { exact: true }).waitFor();
   assert.equal(await secondPage.evaluate(() => typeof NoWayAuto), 'object');
+  const worldPolicies = await popup.evaluate(async (url) => {
+    const tabs = await chrome.tabs.query({ url: `${new URL(url).origin}/*` });
+    const tab = tabs.find((tab) => tab.active);
+    if (!tab) throw new Error('Fresh test tab not found');
+    return Promise.all(['MAIN', 'ISOLATED'].map(async (world) => {
+      const [{ result }] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, world,
+        func: () => ({ loaded: typeof globalThis.NoWayAuto === 'object', version: globalThis.NoWayAuto?.promptVersion }) });
+      return result;
+    }));
+  }, url);
+  assert.equal(worldPolicies.every((policy) => policy.loaded), true);
+  assert.equal(worldPolicies[0].version, worldPolicies[1].version);
   await secondPage.locator('[data-testid=follow]').focus();
   await secondPage.keyboard.press('Enter');
   assert.equal(await secondPage.evaluate(() => window.mutations.follow || 0), 0);

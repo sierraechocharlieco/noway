@@ -6,9 +6,6 @@ import { webcrypto } from 'node:crypto';
 
 const root = new URL('../', import.meta.url);
 const source = (path) => readFileSync(new URL(path, root), 'utf8');
-test('MAIN and ISOLATED policy entry points stay identical', () => {
-  assert.equal(source('shared/auto-main.js'), source('shared/auto.js'));
-});
 function policyContext() {
   const context = vm.createContext({ console, AbortController, DOMException, setTimeout, clearTimeout });
   vm.runInContext(source('shared/auto.js'), context);

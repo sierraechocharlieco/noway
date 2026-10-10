@@ -720,7 +720,7 @@ async function syncOriginContentScripts(origin, originState) {
     {
       id: ids.main,
       matches: [matchPatternFromOrigin(origin)],
-      js: ['shared/auto-main.js', MAIN_SCRIPT],
+      js: ['shared/auto.js', MAIN_SCRIPT],
       runAt: 'document_start',
       world: 'MAIN',
       allFrames: true,
@@ -729,7 +729,7 @@ async function syncOriginContentScripts(origin, originState) {
     {
       id: ids.controller,
       matches: [matchPatternFromOrigin(origin)],
-      js: ['shared/auto.js', 'shared/brand.js', CONTROLLER_SCRIPT],
+      js: ['shared/brand.js', CONTROLLER_SCRIPT],
       runAt: 'document_start',
       world: 'ISOLATED',
       allFrames: true,
@@ -743,12 +743,12 @@ async function injectIntoTab(tabId) {
     debugLog({ stage: 'inject', tabId });
     await chrome.scripting.executeScript({
       target: { tabId, allFrames: true },
-      files: ['shared/auto-main.js', MAIN_SCRIPT],
+      files: ['shared/auto.js', MAIN_SCRIPT],
       world: 'MAIN',
     });
     await chrome.scripting.executeScript({
       target: { tabId, allFrames: true },
-      files: ['shared/auto.js', 'shared/brand.js', CONTROLLER_SCRIPT],
+      files: ['shared/brand.js', CONTROLLER_SCRIPT],
       world: 'ISOLATED',
     });
     debugLog({ stage: 'inject', tabId, result: 'ok' });

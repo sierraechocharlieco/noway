@@ -36,7 +36,7 @@
     "default_path": "ai/sidepanel.html"
   },
   "web_accessible_resources": [{
-    "resources": ["assets/fonts/hanken-grotesk.woff2", "assets/fonts/schibsted-grotesk.woff2", "assets/betta-mark.png"],
+    "resources": ["shared/auto.js", "assets/fonts/hanken-grotesk.woff2", "assets/fonts/schibsted-grotesk.woff2", "assets/betta-mark.png"],
     "matches": ["http://*/*", "https://*/*"]
   }]
 }

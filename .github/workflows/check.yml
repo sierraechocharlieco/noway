@@ -26,7 +26,6 @@ jobs:
           node --check background/service_worker.js
           node --check background/auto-training.js
           node --check shared/auto.js
-          node --check shared/auto-main.js
           node --check shared/brand.js
           node --check ai/classifier.js
           node --check ai/sidepanel.js

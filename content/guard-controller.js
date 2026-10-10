@@ -11,6 +11,16 @@
   }
   window.__NOWAY_CONTROLLER_INSTALLED__ = true;
 
+  // Import the shared policy instead of registering its path in both worlds.
+  // Chrome deduplicates registered file paths across worlds on fresh navigation.
+  try {
+    await import(chrome.runtime.getURL('shared/auto.js'));
+  } catch (error) {
+    window.__NOWAY_CONTROLLER_INSTALLED__ = false;
+    console.error('[No Way!] Could not load action policy:', error);
+    return;
+  }
+
   NoWayBrand.loadFonts();
 
   const SOURCE_MAIN = 'NOWAY_MAIN';

@@ -67,7 +67,7 @@ Use `node tools/harness.mjs` for browser-level verification. The harness auto-in
 
 `manifest.json` declares an MV3 extension with `storage`, `scripting`, `tabs`, and optional `http://*/*` / `https://*/*` host permissions. The extension should request site access per origin rather than asking for broad access upfront.
 
-`background/auto-training.js` owns model host routing, proofs, serialized storage work, and the `noWayAutoTrainingV1` strategy/provenance store. `shared/auto.js` provides the bounded evidence and classification contract; `ai/` hosts the model in an extension side panel. Keep `shared/auto-main.js` byte-identical to `shared/auto.js`; Chrome's registered content scripts require distinct file paths across execution worlds, and the tests enforce that equality.
+`background/auto-training.js` owns model host routing, proofs, serialized storage work, and the `noWayAutoTrainingV1` strategy/provenance store. `shared/auto.js` provides the bounded evidence and classification contract; `ai/` hosts the model in an extension side panel. Register `shared/auto.js` in MAIN only; the ISOLATED controller imports that same file as a module. Chrome deduplicates paths registered across worlds. Keep initialization idempotent and the policy file web-accessible for the content-script import.
 
 `background/service_worker.js` owns rule storage, host permission state, dynamic content script registration, import/export, rule updates, and the bundled LinkedIn starter rules.
 
@@ -79,7 +79,7 @@ Use `node tools/harness.mjs` for browser-level verification. The harness auto-in
 
 `options/` is the rule manager. It supports viewing per-origin rules, enable/disable, individual delete, select-all per origin, bulk delete, and import/export.
 
-`shared/brand.css` supplies SEC colours and local fonts to extension pages. `shared/brand.js` supplies matching tokens and font loading to the ISOLATED controller. Injected UI uses Shadow DOM plus inline resets so page CSS cannot change its controls. Only the betta and two UI fonts are web-accessible; rule storage stays restricted to trusted extension contexts where Chrome supports that restriction. Keep the shield icon source in `icons/no-way-icon.svg` and ship its rendered PNG sizes; loading the extension requires no asset build.
+`shared/brand.css` supplies SEC colours and local fonts to extension pages. `shared/brand.js` supplies matching tokens and font loading to the ISOLATED controller. Injected UI uses Shadow DOM plus inline resets so page CSS cannot change its controls. Only the shared policy, betta and two UI fonts are web-accessible; rule storage stays restricted to trusted extension contexts where Chrome supports that restriction. Keep the shield icon source in `icons/no-way-icon.svg` and ship its rendered PNG sizes; loading the extension requires no asset build.
 
 ## Rule Store
 

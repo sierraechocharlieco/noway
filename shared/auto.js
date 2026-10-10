@@ -1,6 +1,5 @@
 // Shared, dependency-free policy and DOM evidence.
-// Keep auto-main.js byte-identical (enforced by tests). Chrome deduplicates a
-// registered script's file path across worlds; MAIN needs a distinct file path.
+// Loaded independently in each execution world. Repeated injection is harmless.
 (() => {
   'use strict';
   if (globalThis.NoWayAuto) return;
