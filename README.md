@@ -55,7 +55,7 @@ Manual training asks for analyst choice and stores block or allow rules. Protect
 
 Auto is an experimental, per-site training option. Turn on **Auto** in the popup to start Training and open the model panel. The tooltip explains local processing. In the panel, choose **Download local model** or **Start local model**. Chrome manages Gemini Nano; no API key is required.
 
-Keep the panel open in the same browser window while using Auto. Clear mutating actions are learned as block rules. Unfamiliar controls are checked with Chrome’s Prompt API, using bounded action labels and semantic metadata. Safe controls can be checked ahead of a click; if an action was paused for a check, click again within 10 seconds to continue. No Way! never replays your click.
+Keep the panel open in the same browser window while using Auto. Clear mutating actions are learned as block rules. For unfamiliar controls, Nano describes what the control does from a short summary of it; No Way! decides what happens. Actions that change something are blocked and learned. Actions that could reveal you, such as viewing a story or joining a live stream, go to manual review. A read-only answer counts only when the label also reads as read-only, so many ordinary links still need review. Safe controls can be checked ahead of a click; if an action was paused for a check, click again within 10 seconds to continue. No Way! never replays your click.
 
 Uncertain actions, timeouts, unsupported devices, and closing the model panel use manual review for undecided controls. The badge and popup show **Auto paused** when the model is unavailable. Existing explicit Allow rules take precedence. Nano never creates permanent Allow rules or overrides an existing block.
 
@@ -68,7 +68,7 @@ Learned blocks work in Protection without the model or panel. Disable Training t
 - Rules and settings are stored locally through `chrome.storage.local`.
 - The extension does not call a remote detection service.
 - Manual detection uses local regex and action-term matching. Optional Auto training adds local Prompt API classification; action checks are not sent to a cloud service.
-- Chrome may download its model during setup. No Way! does not collect full pages, messages, drafts, input values, or credentials for classification. A control’s bounded accessible label can include names; only minimal match evidence is persisted with a learned rule.
+- Chrome may download its model during setup. No Way! does not collect full pages, messages, drafts, input values, or credentials for classification. Before classification, numbers, @handles, web addresses, and email addresses in a control’s label are replaced with placeholders, and links are described only as pointing to the same site or another site. A label can still include names. Only minimal match evidence is persisted with a learned rule.
 - SEC fonts and artwork are bundled locally. In-page notices use Shadow DOM; the public asset list contains only the betta and UI fonts, with no additional site permissions.
 - Brand fonts are bundled locally; the interface does not fetch fonts from a CDN.
 - Import and export are user-initiated JSON file operations.

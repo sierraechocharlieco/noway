@@ -56,6 +56,9 @@ node --check content/guard-main.js
 node --check content/guard-controller.js
 node --check popup/popup.js
 node --check options/rules.js
+node --check shared/auto.js
+node --check ai/classifier.js
+node --check background/auto-training.js
 ```
 
 Use `node tools/harness.mjs` for browser-level verification. The harness auto-installs Chrome for Testing when needed, and can also detect binaries installed by `node tools/install-chrome-for-testing.mjs` or Puppeteer Browser installs under `chrome/`.
@@ -125,7 +128,7 @@ Rule changes must take effect in already-open same-origin tabs without requiring
 
 Manual risk detection is local regex/action-term matching. Auto training is an explicitly opted-in per-origin strategy using Chrome’s local Prompt API. It looks for mutating actions such as reaction/favourite, follow, connect, comment, share, boost/promote, message, post, delete, purchase, endorse/recommend, and save. It avoids normal browsing/search/filter/menu/read-only controls.
 
-Keep model classification local through Chrome’s Prompt API. Do not add remote inference or other model runtimes unless explicitly requested. The model supplies categories; the synchronous guard and stored rules enforce decisions.
+Keep model classification local through Chrome’s Prompt API. Do not add remote inference or other model runtimes unless explicitly requested. The model only describes what a control does; extension code decides, and the synchronous guard and stored rules enforce decisions.
 
 Learned rules should capture the risky action, not the specific person/object in the label. For example, `Follow Jane Doe` should train and match as the origin-wide `Follow` action.
 
@@ -159,6 +162,8 @@ Rule blocking does not currently depend on confidence; blocking depends on rule 
 - Persist only block decisions automatically, using worker-issued expiring proofs and a final document/evidence validation. Persistent matches are constructed by extension code, never model-generated selectors.
 - `match.autoEvidence` is a strict conjunction for unfamiliar controls. Preserve it through sanitization/import/export; never discard invalid evidence and retain a broader rule.
 - Keep Auto preferences/provenance/suppressions in `noWayAutoTrainingV1`, separate from v1 rule exports. Imports reset affected origins to Manual. Suppressed deleted/disabled actions require an explicit retrain or manual rule.
+- Nano returns one effect for a templated control card; `fromEffect()` and `adjudicate()` decide. `presence` and `unknown` always mean manual review. The system prompt, examples, card format and schema form one contract in `shared/auto.js`; bump `promptVersion` when changing any of them.
+- `evidence.hints` is model-only context. Keep it out of `evidenceMatch()`, stored rules and suppression keys, so existing exact rules keep matching.
 - Run `node tests/auto.test.mjs` for policy, lifecycle, frame, and storage regressions. See HARNESS.md for native browser checks using a fake model and a separate real-model availability check.
 
 

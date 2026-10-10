@@ -74,16 +74,13 @@ try {
   console.log(`Native Prompt API availability: ${nativeModel}`);
   const model = await context.newPage();
   await model.addInitScript(() => {
-    const decision = (label) => /Track updates/.test(label)
-      ? { decision: 'risky', actionKey: 'follow', reasonCode: 'relationship_change' }
-      : /Ambiguous|Slow|Change during/.test(label)
-        ? { decision: 'uncertain', actionKey: 'unknown', reasonCode: 'insufficient_evidence' }
-        : { decision: 'safe', actionKey: 'none', reasonCode: 'read_only' };
+    // The model answers with one effect for a control card (see NoWayAuto.card).
+    const effect = (label) => /Track updates/.test(label) ? 'follow' : /Ambiguous|Slow|Change during/.test(label) ? 'unknown' : 'local-view';
     const base = { destroy() {}, async clone() { return { destroy() {}, prompt(input, { signal }) {
-      const label = JSON.parse(input).label;
+      const label = JSON.parse(input.match(/^Label: (".*")$/m)?.[1] || '""');
       const ms = /Slow/.test(label) ? 3000 : /View foreground safe/.test(label) ? 700 : /Change during/.test(label) ? 600 : 80;
       return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => resolve(JSON.stringify(decision(label))), ms);
+        const timer = setTimeout(() => resolve(JSON.stringify(effect(label))), ms);
         signal?.addEventListener('abort', () => { clearTimeout(timer); reject(new DOMException('Aborted', 'AbortError')); }, { once: true });
       });
     } }; } };

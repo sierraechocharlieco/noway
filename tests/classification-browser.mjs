@@ -63,6 +63,23 @@ export async function checkClassification(context, root, starterRules) {
       }, {label, query});
       assert.equal(await page.locator('a').evaluate(el => NoWayAuto.profileLink(el)), false, 'Mutation labels and unknown query parameters do not bypass checks');
     }
-    return safe.length + risky.length + 6;
+    const hints = await page.evaluate(() => {
+      document.body.innerHTML = `<div role="dialog" aria-labelledby="title"><h2 id="title">Add a note to your invitation?</h2>
+        <button id="send">Send without a note</button>
+        <div role="button" id="icon" aria-haspopup="menu"><svg class="fa-solid icon-heart" aria-hidden="true"><use href="#heart"></use></svg>
+          <span role="button"><svg data-icon="trash"></svg></span></div></div>
+        <a id="fragment" href="#top">Top</a><a id="script" href="javascript:void(0)">Run</a>
+        <a id="away" href="https://example.com/report" target="_blank">Report</a>`;
+      const snap = (id) => NoWayAuto.snapshot(document.getElementById(id), 'activate');
+      return { send: snap('send'), icon: snap('icon'), links: ['fragment', 'script', 'away'].map((id) => [snap(id).hints.link, snap(id).hints.newTab]),
+        match: Object.keys(NoWayAuto.evidenceMatch(snap('send'))) };
+    });
+    assert.deepEqual(hints.send.hints.scope, [{ tag: 'div', role: 'dialog', label: 'Add a note to your invitation?' }]);
+    assert.deepEqual(hints.send.context, [{ tag: 'div', role: 'dialog', label: '' }], 'persistent context is unchanged');
+    assert.deepEqual(hints.icon.hints.icons, ['icon-heart', 'heart'], 'icons come from the control, not a nested control');
+    assert.equal(hints.icon.hints.haspopup, 'menu');
+    assert.deepEqual(hints.links, [['this-page', false], ['script', false], ['cross-origin', true]]);
+    assert.equal(hints.match.includes('hints'), false, 'model-only hints never enter stored rule matches');
+    return safe.length + risky.length + 12;
   } finally { await page.close(); }
 }

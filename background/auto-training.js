@@ -6,6 +6,7 @@ let autoStoreLoading = null;
 const autoHosts = new Map();
 const autoProofs = new Map();
 const autoPending = new Map();
+const autoDescriptions = new Map();
 let writeQueue = Promise.resolve();
 
 function serializeWork(work) {
@@ -129,8 +130,14 @@ async function classifyAuto(message, sender) {
     detector = 'heuristic';
   } else {
     const host = autoHosts.get(sender.tab.windowId);
-    const id = crypto.randomUUID();
-    result = await new Promise((resolve) => {
+    // The model's answer depends only on the card, so reuse it per site and host session.
+    // Adjudication, suppression and proofs below still run against this exact evidence.
+    const descriptionKey = `${context.origin}\n${host?.generation}\n${NoWayAuto.card(evidence)}`;
+    const described = autoDescriptions.get(descriptionKey);
+    const reused = described?.expires > Date.now();
+    if (reused) result = described.result;
+    else result = await new Promise((resolve) => {
+      const id = crypto.randomUUID();
       const finish = (value) => {
         clearTimeout(timer);
         autoPending.delete(id);
@@ -144,6 +151,8 @@ async function classifyAuto(message, sender) {
       try { host.port.postMessage({ type: 'classify', id, evidence }); }
       catch (_) { finish(NoWayAuto.uncertain()); }
     });
+    // Timeouts, cancellations and lost hosts all yield uncertain; only answers are reusable.
+    if (!reused && result.decision !== 'uncertain') rememberDescription(descriptionKey, result);
   }
   const latest = await autoContext(sender);
   if (latest.auto.revision !== context.auto.revision) return { ok: false, error: 'Auto state changed.' };
@@ -156,6 +165,13 @@ async function classifyAuto(message, sender) {
   if (autoProofs.size >= 500) autoProofs.delete(autoProofs.keys().next().value);
   autoProofs.set(proof, { ...context, evidence, result, detector, expires: Date.now() + 10000 });
   return { ok: true, ...result, proof };
+}
+
+function rememberDescription(descriptionKey, result) {
+  const now = Date.now();
+  for (const [stored, entry] of autoDescriptions) if (entry.expires < now) autoDescriptions.delete(stored);
+  if (autoDescriptions.size >= 500) autoDescriptions.delete(autoDescriptions.keys().next().value);
+  autoDescriptions.set(descriptionKey, { result, expires: now + 300000 });
 }
 
 async function commitAuto(message, sender) {
@@ -211,6 +227,7 @@ chrome.runtime.onConnect.addListener((port) => {
     }
   });
   port.onDisconnect.addListener(() => {
+    if (host) for (const stored of autoDescriptions.keys()) if (stored.split('\n')[1] === host.generation) autoDescriptions.delete(stored);
     if (host && autoHosts.get(host.windowId) === host) autoHosts.delete(host.windowId);
     for (const pending of autoPending.values()) if (pending.host === host) pending.finish(NoWayAuto.uncertain());
     broadcastAutoHostChange();
