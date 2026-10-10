@@ -198,7 +198,7 @@ addChromeListener(chrome.permissions?.onAdded, (permissions) => {
 
 addChromeListener(chrome.permissions?.onRemoved, (permissions) => {
   if (!permissions.origins?.length) return;
-  serializeWork(() => handleRemovedHostPermissions(permissions.origins)).catch((error) => console.error('[No Way!]', error));
+  serializeWork(handleRemovedHostPermissions).catch((error) => console.error('[No Way!]', error));
 });
 
 addChromeListener(chrome.tabs?.onActivated, (activeInfo) => {
@@ -583,11 +583,12 @@ async function getRulesView() {
   const store = await getStore();
   const origins = {};
   for (const [origin, originState] of Object.entries(store.origins)) {
+    const sanitized = sanitizeOriginState(originState);
     origins[origin] = {
-      ...sanitizeOriginState(originState),
+      ...sanitized,
       permissionGranted: await hasHostPermission(origin),
       auto: autoSettings(origin),
-      rules: sanitizeOriginState(originState).rules.map((rule) => {
+      rules: sanitized.rules.map((rule) => {
         const provenance = autoStore?.ruleProvenance[`${origin}|${rule.id}`];
         return { ...rule, autoLearned: Boolean(provenance),
           autoDetector: provenance?.detector === 'nano' ? 'nano' : provenance?.detector === 'heuristic' ? 'heuristic' : null };
@@ -664,14 +665,18 @@ async function deleteRules(items = []) {
   return getRulesView();
 }
 
-async function handleRemovedHostPermissions(origins) {
+async function handleRemovedHostPermissions() {
+  // This event can be the one that wakes the worker, before anything loaded the auto store.
+  await loadAutoStore();
   const store = await getStore();
   let changed = false;
   const revoked = [];
   // Chrome may report wildcard host grants, or a host without an origin's port.
   // Recheck the actual grant rather than treating the removed pattern as a URL.
-  for (const origin of Object.keys(store.origins)) {
-    if (await hasHostPermission(origin)) continue;
+  for (const [origin, originState] of Object.entries(store.origins)) {
+    const alreadyOff = !originState.trainingEnabled && !originState.protectionEnabled
+      && !originState.protectionAllowOnce && autoSettings(origin).strategy === 'manual';
+    if (alreadyOff || await hasHostPermission(origin)) continue;
 
     autoStore.origins[origin] = { ...autoSettings(origin), strategy: 'manual' };
     store.origins[origin].trainingEnabled = false;

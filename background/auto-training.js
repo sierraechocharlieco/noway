@@ -201,8 +201,10 @@ chrome.runtime.onConnect.addListener((port) => {
       autoHosts.set(message.windowId, host);
       port.postMessage({ type: 'registered', generation: host.generation });
     } else if (message.type === 'status' && host && autoHosts.get(host.windowId) === host) {
-      host.status = ['ready', 'loading', 'unavailable', 'idle', 'error'].includes(message.status) ? message.status : 'error';
-      serializeWork(async () => { await loadAutoStore(); await broadcastStateToAllGuardedTabs(); }).catch(() => {});
+      const status = ['ready', 'loading', 'unavailable', 'idle', 'error'].includes(message.status) ? message.status : 'error';
+      if (status === host.status) return;
+      host.status = status;
+      broadcastAutoHostChange();
     } else if (message.type === 'result' && host) {
       const pending = autoPending.get(message.id);
       if (pending?.host === host) pending.finish(NoWayAuto.validateDecision(message.result));
@@ -211,6 +213,23 @@ chrome.runtime.onConnect.addListener((port) => {
   port.onDisconnect.addListener(() => {
     if (host && autoHosts.get(host.windowId) === host) autoHosts.delete(host.windowId);
     for (const pending of autoPending.values()) if (pending.host === host) pending.finish(NoWayAuto.uncertain());
-    serializeWork(async () => { await loadAutoStore(); await broadcastStateToAllGuardedTabs(); }).catch(() => {});
+    broadcastAutoHostChange();
   });
 });
+
+// Model host status only matters to guarded origins using Auto. Coalesce bursts of
+// status changes into one refresh rather than rescanning every tab per message.
+let autoHostBroadcastQueued = false;
+function broadcastAutoHostChange() {
+  if (autoHostBroadcastQueued) return;
+  autoHostBroadcastQueued = true;
+  serializeWork(async () => {
+    autoHostBroadcastQueued = false;
+    await loadAutoStore();
+    const store = await getStore();
+    const origins = Object.entries(store.origins).filter(([origin, originState]) => (
+      (originState.trainingEnabled || originState.protectionEnabled) && autoSettings(origin).strategy === 'auto'
+    ));
+    await Promise.all(origins.map(([origin]) => refreshOriginTabs(origin)));
+  }).catch(() => {});
+}

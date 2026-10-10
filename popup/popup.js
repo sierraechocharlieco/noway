@@ -254,6 +254,8 @@ async function setAuto() {
   const enabled = els.auto.checked;
   // Open immediately, while the popup's user activation is still present.
   const opening = enabled ? openModelPanel() : Promise.resolve();
+  // Optimistically update local state so render() never snaps the toggle back.
+  currentState.auto = { ...(currentState.auto || {}), strategy: enabled ? 'auto' : 'manual' };
   setBusy(true);
   try {
     const response = await chrome.runtime.sendMessage({ type: 'NOWAY_SET_AUTO', origin: currentState.origin, enabled, tabId: currentTab?.id });
@@ -322,7 +324,7 @@ async function importRules() {
 
 function setBusy(nextBusy) {
   busy = nextBusy;
-  // Only re-render when becoming non-busy; becoming busy is handled by optimistic updates.
+  // Callers optimistically update currentState before going busy, so this render keeps their values.
   if (currentState) render();
 }
 
