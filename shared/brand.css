@@ -1,0 +1,38 @@
+@font-face { font-family: 'Hanken Grotesk'; src: url('../assets/fonts/hanken-grotesk.woff2') format('woff2'); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: 'Schibsted Grotesk'; src: url('../assets/fonts/schibsted-grotesk.woff2') format('woff2'); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: 'JetBrains Mono'; src: url('../assets/fonts/jetbrains-mono.woff2') format('woff2'); font-weight: 100 900; font-display: swap; }
+:root {
+  color-scheme: light dark;
+  --bg: #f5f8f7; --surface: #fff; --surface-variant: #ecf1f0;
+  --text: #0b1113; --muted: #56696f; --border: #cad6d3; --control-border: #56696f;
+  --accent: #176a61; --accent-strong: #14534c; --accent-soft: #e7f6f3; --on-accent: #fff;
+  --danger: #9a311f; --danger-soft: #fdede9; --warning: #805500; --success: #176a61;
+  --danger-strong: #7b2719; --on-danger: #fff;
+  --current: #2a9c90; --signal: #de5139;
+  --shadow: none; --focus: 0 0 0 3px #176a6140;
+  --font: 'Hanken Grotesk', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --heading-font: 'Schibsted Grotesk', var(--font);
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #070b0d; --surface: #0b1113; --surface-variant: #121b1e;
+    --text: #f5f8f7; --muted: #a7b5b9; --border: #28383d; --control-border: #7c8e94;
+    --accent: #3fb4a7; --accent-strong: #67c9bd; --accent-soft: #0e2a28; --on-accent: #070b0d;
+    --danger: #ee8872; --danger-soft: #2a1410; --warning: #e0a235; --success: #67c9bd;
+    --danger-strong: #f4ae9f; --on-danger: #070b0d;
+    --focus: 0 0 0 3px #67c9bd50;
+  }
+}
+* { box-sizing: border-box; }
+body { color: var(--text); background: var(--bg); font-family: var(--font); -webkit-font-smoothing: antialiased; }
+h1, h2, h3, .title { font-family: var(--heading-font); }
+button, input, select, textarea { font: inherit; }
+button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 3px;
+}
+a { color: var(--accent); text-underline-offset: 3px; }
+[hidden] { display: none !important; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }
+@media (forced-colors: active) { button, .switch { border: 1px solid ButtonText !important; } input:checked + .switch { background: Highlight !important; } }

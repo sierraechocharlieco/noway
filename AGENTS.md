@@ -56,6 +56,9 @@ node --check content/guard-main.js
 node --check content/guard-controller.js
 node --check popup/popup.js
 node --check options/rules.js
+node --check shared/auto.js
+node --check ai/classifier.js
+node --check background/auto-training.js
 ```
 
 Use `node tools/harness.mjs` for browser-level verification. The harness auto-installs Chrome for Testing when needed, and can also detect binaries installed by `node tools/install-chrome-for-testing.mjs` or Puppeteer Browser installs under `chrome/`.
@@ -63,6 +66,8 @@ Use `node tools/harness.mjs` for browser-level verification. The harness auto-in
 ## Extension Architecture
 
 `manifest.json` declares an MV3 extension with `storage`, `scripting`, `tabs`, and optional `http://*/*` / `https://*/*` host permissions. The extension should request site access per origin rather than asking for broad access upfront.
+
+`background/auto-training.js` owns model host routing, proofs, serialized storage work, and the `noWayAutoTrainingV1` strategy/provenance store. `shared/auto.js` provides the bounded evidence and classification contract; `ai/` hosts the model in an extension side panel. Keep `shared/auto-main.js` byte-identical to `shared/auto.js`; Chrome's registered content scripts require distinct file paths across execution worlds, and the tests enforce that equality.
 
 `background/service_worker.js` owns rule storage, host permission state, dynamic content script registration, import/export, rule updates, and the bundled LinkedIn starter rules.
 
@@ -73,6 +78,8 @@ Use `node tools/harness.mjs` for browser-level verification. The harness auto-in
 `popup/` identifies the active tab origin, requests optional host access, toggles Training and Protection, shows the rule count, links to the rule manager, and supports import/export.
 
 `options/` is the rule manager. It supports viewing per-origin rules, enable/disable, individual delete, select-all per origin, bulk delete, and import/export.
+
+`shared/brand.css` supplies SEC colours and local fonts to extension pages. `shared/brand.js` supplies matching tokens and font loading to the ISOLATED controller. Injected UI uses Shadow DOM plus inline resets so page CSS cannot change its controls. Only the betta and two UI fonts are web-accessible; rule storage stays restricted to trusted extension contexts where Chrome supports that restriction. Keep the shield icon source in `icons/no-way-icon.svg` and ship its rendered PNG sizes; loading the extension requires no asset build.
 
 ## Rule Store
 
@@ -119,9 +126,9 @@ Rule changes must take effect in already-open same-origin tabs without requiring
 
 ## Regex Matching And Confidence
 
-Risk detection is local regex/action-term matching only. It looks for mutating actions such as reaction/favourite, follow, connect, comment, share, boost/promote, message, post, delete, purchase, endorse/recommend, and save. It avoids normal browsing/search/filter/menu/read-only controls.
+Manual risk detection is local regex/action-term matching. Auto training is an explicitly opted-in per-origin strategy using Chrome’s local Prompt API. It looks for mutating actions such as reaction/favourite, follow, connect, comment, share, boost/promote, message, post, delete, purchase, endorse/recommend, and save. It avoids normal browsing/search/filter/menu/read-only controls.
 
-Do not add on-device or remote model-based detection unless explicitly requested.
+Keep model classification local through Chrome’s Prompt API. Do not add remote inference or other model runtimes unless explicitly requested. The model only describes what a control does; extension code decides, and the synchronous guard and stored rules enforce decisions.
 
 Learned rules should capture the risky action, not the specific person/object in the label. For example, `Follow Jane Doe` should train and match as the origin-wide `Follow` action.
 
@@ -145,3 +152,21 @@ Rule blocking does not currently depend on confidence; blocking depends on rule 
 - Injected prompt/toast/badge UI uses inline `all:initial` styling to avoid page CSS bleed.
 - Storage access should remain restricted to trusted extension contexts where Chrome supports `chrome.storage.local.setAccessLevel`.
 - Do not add a build pipeline unless explicitly requested.
+
+## Auto Training Invariants
+
+- Auto is per origin and requires Training enabled. A live model panel in the same browser window supplies readiness; unavailable inference falls back to manual review for undecided Auto candidates.
+- Stop undecided actions synchronously before classification. Never release any remaining events in the stopped gesture; a safe result requires a new physical activation.
+- Exact safe caches bind to the live element, document, current evidence, and state revision. They are transient and cannot override stored blocks or direct mutation evidence.
+- Page bridge messages are hints. Re-read evidence in ISOLATED, validate extension runtime senders, and authorize rules against the originating frame URL rather than the top-level tab URL.
+- Persist only block decisions automatically, using worker-issued expiring proofs and a final document/evidence validation. Persistent matches are constructed by extension code, never model-generated selectors.
+- `match.autoEvidence` is a strict conjunction for unfamiliar controls. Preserve it through sanitization/import/export; never discard invalid evidence and retain a broader rule.
+- Keep Auto preferences/provenance/suppressions in `noWayAutoTrainingV1`, separate from v1 rule exports. Imports reset affected origins to Manual. Suppressed deleted/disabled actions require an explicit retrain or manual rule.
+- Nano returns one effect for a templated control card; `fromEffect()` and `adjudicate()` decide. `presence` and `unknown` always mean manual review. The system prompt, examples, card format and schema form one contract in `shared/auto.js`; bump `promptVersion` when changing any of them.
+- `evidence.hints` is model-only context. Keep it out of `evidenceMatch()`, stored rules and suppression keys, so existing exact rules keep matching.
+- Run `node tests/auto.test.mjs` for policy, lifecycle, frame, and storage regressions. See HARNESS.md for native browser checks using a fake model and a separate real-model availability check.
+
+
+## Interface Writing
+
+Follow Apple’s interface-writing guidance: use short, specific labels; remove filler and repeated explanations; keep terms consistent. Use “site” in user-facing copy, not “origin.” Use verb-led button labels in title case and sentence case for messages. Keep Prompt API and Gemini Nano details in the Auto tooltip/model panel. Preserve instructions needed to act safely, including the second click and 10-second limit after Allow Once. Avoid slogans, anthropomorphism, and claims that a model verdict proves safety.

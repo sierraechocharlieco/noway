@@ -1,0 +1,30 @@
+@import url('../shared/brand.css');
+body { margin: 0; padding: 24px; font-size: 1rem; line-height: 1.5; overflow-wrap: anywhere; }
+.brand-header { display: flex; align-items: center; gap: 12px; padding-bottom: 28px; }
+.brand-header img { object-fit: contain; }
+.wordmark { display: block; font-family: var(--heading-font); font-size: 1.25rem; font-weight: 750; }
+.byline, .model-name, .model-footnote, .muted { color: var(--muted); font-size: 0.875rem; }
+h1 { font-size: 1.875rem; letter-spacing: -.03em; line-height: 1.15; margin: 0; }
+h2 { font-size: 1rem; margin: 0; font-weight: 650; }
+p { margin: 8px 0 0; }
+.model-card { margin-top: 24px; border: 1px solid var(--border); border-radius: 12px; padding: 20px; background: var(--surface); }
+.model-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.model-name { margin-left: auto; }
+.model-dot { width: 8px; height: 8px; background: var(--muted); border-radius: 50%; flex-shrink: 0; }
+.model-dot.ready { background: var(--accent); }
+#model-status { font-size: 0.875rem; margin: 16px 0; }
+button { min-height: 44px; border-radius: 8px; border: 1px solid var(--control-border); background: var(--surface); color: var(--text); padding: 10px 16px; cursor: pointer; font-weight: 650; }
+button:hover:not(:disabled) { background: var(--surface-variant); }
+button:disabled { opacity: .6; cursor: not-allowed; }
+button.primary { width: 100%; background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+button.primary:hover:not(:disabled) { background: var(--accent-strong); }
+#cancel-setup { width: 100%; margin-top: 8px; }
+.model-footnote { font-size: 0.875rem; margin-top: 12px; }
+progress { width: 100%; height: 8px; accent-color: var(--accent); margin-bottom: 16px; }
+.site-section { padding: 24px 0; border-bottom: 1px solid var(--border); }
+.site-name { font-family: var(--mono); font-size: 0.875rem; }
+.keep-open { margin: 24px 0; border-left: 2px solid var(--accent); padding-left: 12px; color: var(--muted); font-size: 0.875rem; }
+.panel-actions { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; font-size: 0.875rem; }
+.panel-actions a { display: inline-flex; align-items: center; min-height: 44px; }
+.error { color: var(--danger); font-size: 0.875rem; }
+@media (max-width: 340px) { body { padding: 16px; } .model-card { padding: 16px; } }

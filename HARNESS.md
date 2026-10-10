@@ -79,3 +79,37 @@ node tools/action-monitor.mjs
 ```
 
 The monitor prints click, submit, and Enter-key actions with selector candidates and whether No Way! showed a block toast. Use this while manually exploring a site to find dangerous actions that the module misses.
+
+## Auto training verification
+
+For real Prompt API testing, use branded Google Chrome in a dedicated persistent profile:
+
+```sh
+node tools/harness.mjs --prompt-api --url https://www.linkedin.com/feed/ --no-devtools
+```
+
+This mode uses `.harness/prompt-api-google` by default; override it with `--persistent-profile DIR`. It loads No Way! through Chrome's developer API, since branded Chrome no longer supports the harness's command-line extension loading. Developer extension debugging is enabled only in this separate test profile. Use `--chrome PATH` if Chrome is installed elsewhere. Close that test browser before restarting the harness.
+
+Branded Google Chrome 155.0.8059.39 on this Linux machine completed No Way!'s real model setup and structured-output compatibility check. Warm samples classified Search as safe and Send message as risky in roughly 0.45–0.5 seconds. A Follow sample returned uncertain. These few smoke checks establish that the runtime works, not that the release accuracy targets have been met.
+
+Prompt version 3 was smoke-tested in the same browser on 31 held-out controls that are not among its examples. Sessions reported `topK` 1 and `temperature` 0, and two passes returned identical answers. The model put 28 of 31 controls in the expected group, and none of the risky or presence controls was described as read-only. It described Write a comment… as a comment, so that composer opener is stopped and blocked. It described Join space as follow rather than presence; the action is still stopped. It also followed a label asking for navigate, but adjudication kept that control uncertain. The examples used 1,619 of 9,216 context tokens. Cloning and prompting took 142 ms at p50 and 170 ms at p95, measured inside the panel rather than end to end. This is also a smoke check, not a release evaluation.
+
+Initial model setup downloads several gigabytes; open the No Way! model panel and use its download/setup button. Keep the panel open while using Auto. Use a filesystem with at least 22 GB free, and a machine meeting [Chrome's hardware requirements](https://developer.chrome.com/docs/ai/get-started#hardware). A temporary `/tmp` profile on a small RAM disk can fail those requirements.
+
+The Linux Chrome for Testing 155.0.8059.39 binary used here lacks `liboptimization_guide_internal.so` and returns Chromium's stub inference output, even after downloading Nano weights. That build works for integration tests, but cannot establish real model accuracy or latency. Its default component updates are also disabled; see [Chrome for Testing configuration](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/chrome_for_testing/chrome_for_testing_configuration.md). Do not treat `LanguageModel.availability() === 'available'` alone as proof of real inference.
+
+Run `node tests/auto.test.mjs` for deterministic model-contract and worker tests, in addition to syntax checks for edited JavaScript.
+
+`tests/browser-auto.mjs` starts the existing headed harness on local mutation-counter fixtures. Set `NOWAY_TEST_CHROME` to a Chrome for Testing binary and make Playwright available on `NODE_PATH` (it can be installed outside the extension repository). No production dependency or build step is needed. For example:
+
+```sh
+NODE_PATH=/path/to/node_modules NOWAY_TEST_CHROME=/path/to/chrome node tests/browser-auto.mjs
+```
+
+The browser checks copy the extension into a temporary directory, grant only localhost through that copy’s test manifest, and substitute a fake Prompt API in the test model document. Production host permissions and model code are unchanged. The checks cover automatic blocks, exact unfamiliar-action rules, safe retries while the mouse gesture is held, timeouts, manual overrides, stale evidence, Protection, deletions, host closure, and compact light/dark UI. Screenshots are written under `/tmp/noway-auto-*`.
+
+The test prints native Prompt API availability before substituting the fake. A passing fake-model run proves policy integration, not Nano accuracy or a successful model download. On a supported device, verify setup/download through the real side-panel button, cold startup, and warm offline use. The held-out classification targets in SPEC_AUTO_TRAINING.md remain release evaluation work; Auto is experimental until that evaluation passes.
+
+Browser checks also exercise repeated guard injection, immediate cache invalidation on SPA navigation, SEC font loading, hostile page CSS, live Manual/Protection changes, tooltip dismissal, and the rule editor/export/delete dialogs. Screenshots cover both themes, 320px surfaces, and 200% text in extension pages. Unit tests cover cancelled/stalled model sessions, permission removal, rejected JSON edits, and host closure during rule validation. These tests use fixtures and do not establish coverage for every target site's event handlers.
+
+The browser suite also opens the actual toolbar popup through Chrome's action API and measures its native content width and action placement. Tab previews alone cannot detect Chrome's popup auto-sizing failures.

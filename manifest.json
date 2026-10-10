@@ -21,6 +21,22 @@
     "service_worker": "background/service_worker.js"
   },
   "options_page": "options/rules.html",
-  "permissions": ["activeTab", "scripting", "storage", "tabs"],
-  "optional_host_permissions": ["http://*/*", "https://*/*"]
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "tabs",
+    "sidePanel"
+  ],
+  "optional_host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "side_panel": {
+    "default_path": "ai/sidepanel.html"
+  },
+  "web_accessible_resources": [{
+    "resources": ["assets/fonts/hanken-grotesk.woff2", "assets/fonts/schibsted-grotesk.woff2", "assets/betta-mark.png"],
+    "matches": ["http://*/*", "https://*/*"]
+  }]
 }

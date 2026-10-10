@@ -1,0 +1,6 @@
+<!-- No Way!'s shield/cursor identity in the SEC ink, current, and signal palette. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <path d="M64 17C53 26 40 31 26 31V61C26 84 40 99 64 111C88 99 102 84 102 61V31C88 31 75 26 64 17Z" fill="#0B1113" stroke="#2A9C90" stroke-width="6" stroke-linejoin="round"/>
+  <path d="M52 42V82L62 72L72 91L81 86L70 68H86L52 42Z" fill="#F5F8F7"/>
+  <path d="M38 39L86 87" stroke="#DE5139" stroke-width="7" stroke-linecap="round"/>
+</svg>

@@ -8,80 +8,49 @@
 </head>
 <body>
   <header class="header">
-    <img class="logo" src="../icons/no-way-icon-48.png" alt="" aria-hidden="true">
-    <div>
-      <div class="title">No Way!</div>
-      <div class="subtitle">Dynamic site rules</div>
-    </div>
+    <img class="logo" src="../assets/betta-mark.png" width="44" height="44" alt="">
+    <div><h1 class="title">No Way!</h1><div class="subtitle">Sierra Echo Charlie</div></div>
   </header>
-
-  <section class="status-panel">
-    <div class="status-row">
-      <span class="status-dot" id="status-dot"></span>
-      <span class="status-text" id="status-text">Checking</span>
+  <section class="status-panel" aria-label="Current site status">
+    <div class="site-row"><span class="site-label">Current site</span><span class="site-value" id="current-site">Checking…</span></div>
+    <div class="status-row"><span class="status-dot" id="status-dot" aria-hidden="true"></span><span class="status-text" id="status-text" role="status">Checking</span></div>
+  </section>
+  <section class="controls" id="controls" aria-label="Site controls">
+    <button class="primary-button" id="grant-access" type="button">Allow Site Access</button>
+    <div class="control-group">
+      <label class="toggle-row">
+        <span class="toggle-copy"><span class="toggle-title">Training</span><span class="toggle-help" id="training-help">Choose which actions to block</span></span>
+        <input id="training-toggle" type="checkbox" role="switch" aria-describedby="training-help"><span class="switch" aria-hidden="true"></span>
+      </label>
+      <div class="toggle-row auto-row">
+        <div class="toggle-copy">
+          <div class="auto-heading"><label class="toggle-title" for="auto-toggle">Auto</label>
+            <span class="tooltip-wrap"><button class="info-button" id="auto-info" type="button" aria-label="About Auto training" aria-describedby="auto-tooltip"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 11v6m0-10v.01"/></svg></button>
+              <span class="tooltip" id="auto-tooltip" role="tooltip">Uses Chrome’s Prompt API with Gemini Nano to check actions on your device.</span>
+            </span>
+          </div>
+          <span class="toggle-help" id="auto-help">Create rules automatically</span>
+        </div>
+        <input id="auto-toggle" type="checkbox" role="switch" aria-describedby="auto-help auto-tooltip"><span class="switch" aria-hidden="true"></span>
+      </div>
+      <div id="auto-status-row" class="auto-status-row" hidden><span id="auto-status" role="status"></span><button id="open-model" class="text-button" type="button">Open Model Panel</button></div>
     </div>
-    <div class="site-row">
-      <span class="site-label">Current site</span>
-      <span class="site-value" id="current-site">-</span>
+    <div class="control-group">
+      <label class="toggle-row">
+        <span class="toggle-copy"><span class="toggle-title">Protection</span><span class="toggle-help">Block actions using your rules</span></span>
+        <input id="protection-toggle" type="checkbox" role="switch"><span class="switch" aria-hidden="true"></span>
+      </label>
+      <label class="toggle-row sub-toggle">
+        <span class="toggle-copy"><span class="toggle-title">Allow Once</span><span class="toggle-help">Offer a one-time exception</span></span>
+        <input id="allow-once-toggle" type="checkbox" role="switch"><span class="switch" aria-hidden="true"></span>
+      </label>
     </div>
   </section>
-
-  <section class="controls" id="controls">
-    <button class="primary-button" id="grant-access" type="button">Grant Site Access</button>
-
-    <label class="toggle-row">
-      <span>
-        <span class="toggle-title">Training mode</span>
-        <span class="toggle-help">Prompt on risky actions</span>
-      </span>
-      <input id="training-toggle" type="checkbox">
-      <span class="switch" aria-hidden="true"></span>
-    </label>
-
-    <label class="toggle-row">
-      <span>
-        <span class="toggle-title">Protection</span>
-        <span class="toggle-help">Block learned rules</span>
-      </span>
-      <input id="protection-toggle" type="checkbox">
-      <span class="switch" aria-hidden="true"></span>
-    </label>
-
-    <label class="toggle-row sub-toggle">
-      <span>
-        <span class="toggle-title">Allow once in protection</span>
-        <span class="toggle-help">Prompt instead of silently blocking</span>
-      </span>
-      <input id="allow-once-toggle" type="checkbox">
-      <span class="switch" aria-hidden="true"></span>
-    </label>
-
-    <label class="toggle-row sub-toggle">
-      <span>
-        <span class="toggle-title">Debug logging</span>
-        <span class="toggle-help">Console traces for development</span>
-      </span>
-      <input id="debug-toggle" type="checkbox">
-      <span class="switch" aria-hidden="true"></span>
-    </label>
-  </section>
-
-  <p class="sync-status" id="sync-status"></p>
-
-  <section class="rules-summary">
-    <span>Rules on this site</span>
-    <strong id="rule-count">0</strong>
-  </section>
-
-  <section class="actions">
-    <button id="open-rules" type="button">Manage Rules</button>
-    <button id="export-rules" type="button">Export</button>
-    <button id="import-rules" type="button">Import</button>
-    <input id="import-file" type="file" accept="application/json,.json" hidden>
-  </section>
-
-  <p class="message" id="message"></p>
-
+  <p class="sync-status" id="sync-status" role="status"></p>
+  <section class="rules-summary"><span>Rules on this site</span><strong id="rule-count">0</strong><button id="open-rules" type="button">Manage Rules</button></section>
+  <section class="actions" aria-label="Rule files"><button id="export-rules" type="button">Export</button><button id="import-rules" type="button">Import</button><input id="import-file" type="file" accept="application/json,.json" hidden></section>
+  <details class="developer-settings"><summary>Developer settings</summary><label class="toggle-row"><span class="toggle-copy"><span class="toggle-title">Debug logging</span><span class="toggle-help">Record events in the console</span></span><input id="debug-toggle" type="checkbox" role="switch"><span class="switch" aria-hidden="true"></span></label></details>
+  <p class="message" id="message" role="alert"></p>
   <script src="popup.js"></script>
 </body>
 </html>

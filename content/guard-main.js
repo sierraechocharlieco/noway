@@ -1,7 +1,10 @@
 (() => {
   'use strict';
 
-  const wasAlreadyInstalled = window.__NOWAY_MAIN_INSTALLED__;
+  if (window.__NOWAY_MAIN_INSTALLED__) {
+    window.postMessage({ source: 'NOWAY_MAIN', type: 'NOWAY_READY', payload: { origin: location.origin } }, '*');
+    return;
+  }
   window.__NOWAY_MAIN_INSTALLED__ = true;
 
   const SOURCE_MAIN = 'NOWAY_MAIN';
@@ -19,7 +22,6 @@
     'select',
     'summary',
     '[contenteditable="true"]',
-    'svg[aria-label]',
   ].join(',');
   const ALLOW_ONCE_MS = 10000;
   const PROMPT_DEDUPE_MS = 900;
@@ -28,6 +30,9 @@
 
   let lastMediaClick = null;
 
+  const autoRecords = new Map();
+  const autoTokens = new WeakMap();
+  const stoppedAutoGestures = new WeakSet();
   const state = {
     origin: location.origin,
     trainingEnabled: false,
@@ -35,6 +40,7 @@
     protectionAllowOnce: false,
     debugEnabled: false,
     rules: [],
+    auto: { strategy: 'manual', ready: false },
   };
 
   // Debug ring buffer: last 50 internal decisions for easy DevTools inspection.
@@ -56,14 +62,6 @@
   const recentHitAtByRuleId = new Map();
   const listenerRefs = [];
   let isMainActive = false;
-
-  function termsPattern(terms) {
-    return new RegExp(`\\b(?:${terms.map(escapeRegExp).join('|')})\\b`, 'i');
-  }
-
-  function escapeRegExp(value) {
-    return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  }
 
   const REACTION_TERMS = [
     'Like',
@@ -137,21 +135,6 @@
     'Rate',
   ];
 
-  const RISK_PATTERNS = [
-    ['like', termsPattern(REACTION_TERMS)],
-    ['follow', termsPattern(['Follow', 'Unfollow', 'Subscribe', 'Unsubscribe'])],
-    ['connect', termsPattern(['Connect', 'Invite', 'Add connection', 'Send invite'])],
-    ['comment', termsPattern(['Comment', 'Reply', 'Post comment', 'Add comment'])],
-    ['share', termsPattern(['Share', 'Repost', 'Retweet', 'Quote', 'Duet', 'Stitch'])],
-    ['amplify', termsPattern(AMPLIFY_TERMS)],
-    ['message', termsPattern(['Message', 'Send', 'DM', 'Direct message', 'InMail'])],
-    ['post', termsPattern(['Post', 'Publish', 'Submit', 'Upload', 'Send now'])],
-    ['delete', termsPattern(['Delete', 'Remove', 'Discard', 'Report', 'Block user', 'Mute'])],
-    ['purchase', termsPattern(['Buy', 'Purchase', 'Checkout', 'Order', 'Bid', 'Donate', 'Tip', 'Pay'])],
-    ['endorse', termsPattern(ENDORSE_TERMS)],
-    ['save', termsPattern(['Save', 'Bookmark', 'Collect'])],
-  ];
-
   const ACTION_LABELS = {
     like: 'Reaction/favourite',
     follow: 'Follow',
@@ -182,16 +165,9 @@
     save: ['Save', 'Bookmark', 'Collect'],
   };
 
-  const SAFE_PATTERNS = [
-    /\b(search|filter|sort|find|view|open|close|menu|more|next|previous|prev|back)\b/i,
-    /\b(cancel|dismiss|skip|see more|show more|show less|learn more|help|settings)\b/i,
-    /\b(copy|download|print|analytics|insights|stats|manage|edit filters)\b/i,
-    /\b(contact support|customer support|support center|support centre|support page|support inbox|support chat|help support)\b/i,
-  ];
-
   window.addEventListener('message', (event) => {
     const data = event.data;
-    if (!data || data.source !== SOURCE_CONTROLLER) return;
+    if (event.source !== window || !data || data.source !== SOURCE_CONTROLLER) return;
 
     if (data.type === 'NOWAY_STATE') {
       applyState(data.payload);
@@ -200,6 +176,12 @@
       } else if (isMainActive && !state.trainingEnabled && !state.protectionEnabled) {
         uninstallGuards();
       }
+    } else if (data.type === 'NOWAY_AUTO_PREFETCH') {
+      acceptAutoPrefetch(data.payload);
+    } else if (data.type === 'NOWAY_AUTO_RESULT') {
+      acceptAutoResult(data.payload);
+    } else if (data.type === 'NOWAY_AUTO_INVALIDATE') {
+      autoRecords.clear();
     } else if (data.type === 'NOWAY_ALLOW_ONCE') {
       allowOnce(data.payload?.fingerprint);
     } else if (data.type === 'NOWAY_SHUTDOWN') {
@@ -217,6 +199,7 @@
     const onTouchStart = (event) => handleActivation(event, 'pointer');
     const onClick = (event) => handleActivation(event, 'click');
     const onDblclick = (event) => handleActivation(event, 'dblclick');
+    const onAuxclick = (event) => handleActivation(event, 'click');
     const onKeydown = (event) => handleKeydown(event);
     const onSubmit = (event) => handleSubmit(event);
 
@@ -226,14 +209,16 @@
       { type: 'touchstart', listener: onTouchStart, capture: true },
       { type: 'click', listener: onClick, capture: true },
       { type: 'dblclick', listener: onDblclick, capture: true },
+      { type: 'auxclick', listener: onAuxclick, capture: true },
       { type: 'keydown', listener: onKeydown, capture: true },
       { type: 'submit', listener: onSubmit, capture: true },
     );
 
     document.addEventListener('pointerdown', onPointerDown, true);
     document.addEventListener('mousedown', onMouseDown, true);
-    document.addEventListener('touchstart', onTouchStart, true);
+    document.addEventListener('touchstart', onTouchStart, { capture: true, passive: false });
     document.addEventListener('dblclick', onDblclick, true);
+    document.addEventListener('auxclick', onAuxclick, true);
     document.addEventListener('click', onClick, true);
     document.addEventListener('keydown', onKeydown, true);
     document.addEventListener('submit', onSubmit, true);
@@ -249,6 +234,7 @@
       document.removeEventListener(type, listener, capture);
     }
     listenerRefs.length = 0;
+    autoRecords.clear();
     allowUntilByFingerprint.clear();
     recentPromptAtByFingerprint.clear();
     recentBlockAtByFingerprint.clear();
@@ -259,16 +245,15 @@
   // SPA navigation sync: tell controller to re-fetch state after route changes
   let mainNavTimeout = null;
   function onMainNav() {
+    autoRecords.clear();
+    post('NOWAY_NAVIGATED', {});
     clearTimeout(mainNavTimeout);
     mainNavTimeout = setTimeout(() => {
       post('NOWAY_READY', { origin: location.origin });
-      post('NOWAY_NAVIGATED', {});
     }, 300);
   }
 
-  if (!wasAlreadyInstalled || !window.__NOWAY_MAIN_ACTIVE__) {
-    installGuards();
-  }
+  installGuards();
 
   // Monkey-patch history only once, even if the script is re-injected.
   if (!window.__NOWAY_HISTORY_PATCHED__) {
@@ -287,6 +272,8 @@
   }
 
   function applyState(nextState = {}) {
+    if (state.auto?.revision !== nextState.auto?.revision) autoRecords.clear();
+    state.auto = nextState.auto || { strategy: 'manual', ready: false };
     state.origin = nextState.origin || location.origin;
     state.trainingEnabled = Boolean(nextState.trainingEnabled);
     state.protectionEnabled = Boolean(nextState.protectionEnabled);
@@ -335,12 +322,13 @@
     const form = event.target?.closest?.('form') || event.target;
     if (!form) return;
 
-    const candidate = buildCandidate(form, 'submit', { forceRisk: isRiskyForm(form) });
+    const auto = state.trainingEnabled && state.auto.strategy === 'auto';
+    const candidate = buildCandidate(event.submitter || form, 'submit', { forceRisk: auto ? false : isRiskyForm(form) });
     handleCandidate(event, candidate);
   }
 
   function handleCandidate(event, candidate) {
-    if (!candidate) return;
+    if (!candidate || candidate.target?.closest?.('#noway-training-prompt,#noway-badge,[data-noway-ui],[data-noway-toast]')) return;
 
     if (isAllowed(candidate.fingerprint)) {
       debugLog({ stage: 'decision', decision: 'allow-once', fingerprint: candidate.fingerprint });
@@ -358,6 +346,24 @@
       matchingRuleLabel: matchingRule?.label || null,
       selectors: candidate.match?.selectors || [],
     });
+
+    if (state.trainingEnabled && state.auto.strategy === 'auto') {
+      if (isExplicitlyAllowed(candidate)) return;
+      if (matchingRule) {
+        blockEvent(event);
+        if (isRecentBlock(candidate.fingerprint)) return;
+        recentBlockAtByFingerprint.set(candidate.fingerprint, Date.now());
+        if (state.protectionEnabled && state.protectionAllowOnce) {
+          post('NOWAY_PROMPT', { candidate: serializeCandidate(candidate), mode: 'protection-allow-once', matchingRule: { id: matchingRule.id, label: matchingRule.label } });
+        } else {
+          post('NOWAY_BLOCKED', { label: matchingRule.label, ruleId: matchingRule.id });
+          recordRuleHit(matchingRule.id);
+        }
+        return;
+      }
+      handleAutoCandidate(event, candidate);
+      return;
+    }
 
     // Early gesture events must be stopped for sites that mutate on
     // pointerdown/mousedown, including LinkedIn reactions. Weak fallback
@@ -442,8 +448,86 @@
     debugLog({ stage: 'decision', decision: 'pass', risky: candidate.risky, actionKey: candidate.actionKey });
   }
 
+  function autoEventFamily(el, eventKind) {
+    if (eventKind === 'submit' && el.localName !== 'form') return 'activate';
+    if (eventKind === 'keyboard' && !el.matches?.('textarea,input:not([type="button"]):not([type="submit"]),[contenteditable="true"]')) return 'activate';
+    return ['keyboard', 'submit', 'dblclick'].includes(eventKind) ? eventKind : 'activate';
+  }
+
+  function handleAutoCandidate(event, candidate) {
+    const el = candidate.target;
+    if (!el?.isConnected || el.disabled || el.getAttribute('aria-disabled') === 'true') return;
+    // Focus and ordinary typing are not activation. Enter in a composer is covered separately.
+    if (el.matches('textarea,input:not([type="submit"]):not([type="button"]):not([type="checkbox"]):not([type="radio"]),[contenteditable="true"]')
+      && candidate.eventKind !== 'keyboard' && candidate.eventKind !== 'submit') return;
+    const eventKind = autoEventFamily(el, candidate.eventKind);
+    const evidence = NoWayAuto.snapshot(el, eventKind);
+    if (evidence.navigation === 'profile' && eventKind === 'activate') return;
+    let token = autoTokens.get(el) || el.getAttribute('data-noway-auto-target');
+    if (token && !/^[a-f0-9-]{36}$/.test(token)) token = null;
+    if (!token) {
+      token = NoWayAuto.uuid();
+      autoTokens.set(el, token);
+      el.setAttribute('data-noway-auto-target', token);
+    }
+    autoTokens.set(el, token);
+    let record = autoRecords.get(token);
+    const evidenceKey = NoWayAuto.key(evidence);
+    if (!record || record.key !== evidenceKey || record.expires < Date.now()) {
+      record = { el, key: evidenceKey, evidence, expires: Date.now() + 300000, decision: null, pending: false, blockedGesture: false };
+      autoRecords.set(token, record);
+      if (autoRecords.size > 200) autoRecords.delete(autoRecords.keys().next().value);
+    }
+    const freshGesture = event.type === 'pointerdown' || (event.type === 'keydown' && !event.repeat)
+      || (!window.PointerEvent && ['mousedown', 'touchstart'].includes(event.type));
+    if (freshGesture) stoppedAutoGestures.delete(el);
+    record.blockedGesture = stoppedAutoGestures.has(el);
+    const known = NoWayAuto.actionFor(evidence);
+    debugLog({ stage: 'auto', event: event.type, label: evidence.label, decision: record.decision,
+      pending: record.pending, blockedGesture: record.blockedGesture, ready: state.auto.ready });
+    if (record.decision === 'safe' && state.auto.ready && !known && !record.blockedGesture) return;
+    blockEvent(event);
+    stoppedAutoGestures.add(el);
+    record.blockedGesture = true;
+    if (record.pending || isRecentPrompt(candidate.fingerprint)) return;
+    recentPromptAtByFingerprint.set(candidate.fingerprint, Date.now());
+    record.pending = true;
+    record.requestId = NoWayAuto.uuid();
+    record.fingerprint = candidate.fingerprint;
+    post('NOWAY_AUTO_CHECK', { token, requestId: record.requestId, evidenceKey, eventKind,
+      fingerprint: candidate.fingerprint, revision: state.auto.revision });
+  }
+
+  function acceptAutoPrefetch(payload) {
+    if (!state.trainingEnabled || state.auto.strategy !== 'auto' || !state.auto.ready
+      || payload?.revision !== state.auto.revision || payload.decision !== 'safe'
+      || !/^[a-f0-9-]{36}$/.test(payload.token)) return;
+    const el = document.querySelector(`[data-noway-auto-target="${payload.token}"]`);
+    if (!el) return;
+    const evidence = NoWayAuto.snapshot(el, 'activate');
+    if (NoWayAuto.key(evidence) !== payload.evidenceKey || NoWayAuto.actionFor(evidence)) return;
+    const prior = autoRecords.get(payload.token);
+    if (prior?.pending || prior?.blockedGesture || stoppedAutoGestures.has(el)) return;
+    autoRecords.set(payload.token, { el, evidence, key: payload.evidenceKey, decision: 'safe',
+      expires: Date.now() + 300000, pending: false, blockedGesture: false });
+    autoTokens.set(el, payload.token);
+    if (autoRecords.size > 200) autoRecords.delete(autoRecords.keys().next().value);
+  }
+
+  function acceptAutoResult(payload) {
+    const record = autoRecords.get(payload?.token);
+    if (!record || payload.requestId !== record.requestId || !record.el.isConnected
+      || payload.revision !== state.auto.revision
+      || NoWayAuto.key(NoWayAuto.snapshot(record.el, record.evidence.eventKind)) !== record.key) return;
+    record.pending = false;
+    record.decision = payload.decision === 'safe' ? 'safe' : 'uncertain';
+    // A checked-safe retry still needs a NEW physical gesture; the stopped gesture stays stopped.
+    if (payload.decision === 'safe') record.expires = Date.now() + 10000;
+  }
+
   function candidateFromEvent(event, eventKind) {
     const targets = eventTargets(event);
+    if (targets.some((target) => target.matches?.('#noway-training-prompt,#noway-badge,[data-noway-ui],[data-noway-toast]'))) return null;
 
     // Instagram (and similar sites) implement double-tap/click like via click
     // counting OR the native dblclick event. We handle both paths.
@@ -531,7 +615,7 @@
   function buildCandidate(el, eventKind, options = {}) {
     const label = accessibleLabel(el);
     const labelNorm = normalizeText(label);
-    const actionKey = actionKeyFor(labelNorm) || (options.ruleActionKey || '');
+    const actionKey = NoWayAuto.actionFor(NoWayAuto.snapshot(el, autoEventFamily(el, eventKind))) || (options.ruleActionKey || '');
     const tag = el.tagName?.toLowerCase() || '';
     const role = normalizeText(el.getAttribute?.('role') || '');
     const inputType = normalizeText(el.getAttribute?.('type') || '');
@@ -604,7 +688,7 @@
 
   function isRiskyElement(el, detail) {
     if (isReadOnlyControl(el, detail)) return false;
-    if (detail.actionKey && !safeLabel(detail.labelNorm)) return true;
+    if (detail.actionKey) return true;
     if (detail.eventKind === 'submit') return isRiskyForm(el);
     if (detail.eventKind === 'keyboard' && isComposerLike(el, detail)) return true;
     if (isJavaScriptActionLink(el) && detail.actionKey) return true;
@@ -671,14 +755,12 @@
       form.getAttribute?.('aria-label'),
       form.getAttribute?.('name'),
       form.getAttribute?.('id'),
-      form.textContent?.slice(0, 300),
     ].filter(Boolean).join(' '));
 
     if (/\b(search|filter|find|sign in|log in|login)\b/i.test(label)) return false;
     if (actionKeyFor(label)) return true;
 
-    const submit = form.querySelector?.('button[type="submit"],input[type="submit"],button:not([type])');
-    return Boolean(submit && actionKeyFor(normalizeText(accessibleLabel(submit))));
+    return false;
   }
 
   function isComposerLike(el, detail) {
@@ -697,11 +779,19 @@
 
   function matchesRule(rule, candidate) {
     const match = rule.match || {};
+    if (match.autoEvidence) {
+      const family = autoEventFamily(candidate.target, candidate.eventKind);
+      return NoWayAuto.matchesEvidence(match.autoEvidence, NoWayAuto.snapshot(candidate.target, family));
+    }
     const target = candidate.target;
+    // Starter rules describe mutations, not the menus/composers that precede them.
+    if ((rule.source === 'starter' || (rule.source === 'learned' && NoWayAuto.categories.includes(rule.actionKey)))
+      && !candidate.risky && (accessibleLabel(target) || !isDirectActionControl(target))) return false;
 
     if (Array.isArray(match.selectors)) {
       for (const selector of match.selectors) {
         if (!selector) continue;
+        if (selector.includes('aria-label*=') && !candidate.risky) continue;
         try {
           if (target.matches?.(selector) || target.closest?.(selector)) {
             // If it's a weak selector (like div[role="button"]), we require a
@@ -720,7 +810,7 @@
       }
     }
 
-    if (Array.isArray(match.textLabels)) {
+    if (candidate.risky && Array.isArray(match.textLabels)) {
       for (const textLabel of match.textLabels) {
         if (labelsCompatible(normalizeText(textLabel), candidate.match.labelNorm)) return true;
       }
@@ -739,8 +829,8 @@
   function labelsCompatible(ruleLabel, candidateLabel) {
     if (!ruleLabel || !candidateLabel) return false;
     if (ruleLabel === candidateLabel) return true;
-    if (ruleLabel.length > 3 && candidateLabel.includes(ruleLabel)) return true;
-    return candidateLabel.length > 3 && ruleLabel.includes(candidateLabel);
+    const action = NoWayAuto.directAction(ruleLabel);
+    return Boolean(action && action === NoWayAuto.directAction(candidateLabel));
   }
 
   function blockEvent(event) {
@@ -749,52 +839,11 @@
     event.stopImmediatePropagation();
   }
 
-  // Search for a media element near the click target. Instagram and similar
-  // sites place transparent overlays over images, so the click target may not
-  // be the image itself. We search the event path, siblings, ancestors, and
-  // descendants, preferring large <img> or <video> over tiny SVG overlays.
+  // Media must be the actual target or an ancestor in the event path. A backdrop
+  // must never borrow the action of a hidden image or button in its descendants.
   function findNearbyMedia(target, targets) {
-    if (!target) return null;
-
-    // 1. Already in the event path
-    const fromPath = targets.find((t) => ['img', 'video', 'canvas', 'svg'].includes(t.tagName?.toLowerCase?.()));
-    if (fromPath) return fromPath;
-
-    // 2. Search inside the target if it's a container
-    if (target.querySelector) {
-      const inner = target.querySelector('img, video');
-      if (inner) return inner;
-      const innerSvg = target.querySelector('svg, canvas');
-      if (innerSvg) return innerSvg;
-    }
-
-    // 3. Search siblings and ancestors up to 5 levels
-    let node = target;
-    for (let i = 0; i < 5 && node; i++) {
-      const parent = node.parentElement;
-      if (!parent) break;
-      const sibling = parent.querySelector('img, video');
-      if (sibling) return sibling;
-      // Also look for siblings of ancestors that might be the media container
-      const containerSibling = parent.parentElement?.querySelector('img, video');
-      if (containerSibling) return containerSibling;
-      
-      const siblingSvg = parent.querySelector('svg, canvas');
-      if (siblingSvg) return siblingSvg;
-      node = parent;
-    }
-
-    // 4. Fallback: any media-like element in a wider ancestor search
-    node = target;
-    for (let i = 0; i < 8 && node; i++) {
-      if (node.querySelector) {
-        const wide = node.querySelector('img, video, canvas, svg');
-        if (wide) return wide;
-      }
-      node = node.parentElement;
-    }
-
-    return null;
+    if (!target || !/(^|\.)instagram\.com$/.test(location.hostname) || target.closest?.('a[href]')) return null;
+    return targets.find((el) => ['img', 'video', 'canvas'].includes(el.localName)) || null;
   }
 
   function recordRuleHit(ruleId) {
@@ -893,22 +942,7 @@
   }
 
   function accessibleLabel(el) {
-    const labelledBy = el.getAttribute?.('aria-labelledby');
-    const labelledByText = labelledBy
-      ? labelledBy.split(/\s+/).map((id) => document.getElementById(id)?.textContent || '').join(' ')
-      : '';
-
-    const value = el.matches?.('input[type="button"],input[type="submit"]') ? el.value : '';
-    const text = [
-      el.getAttribute?.('aria-label'),
-      labelledByText,
-      el.getAttribute?.('title'),
-      el.getAttribute?.('alt'),
-      value,
-      el.textContent,
-    ].filter(Boolean).join(' ');
-
-    return text.replace(/\s+/g, ' ').trim().slice(0, 140);
+    return NoWayAuto.snapshot(el, 'activate').label.slice(0, 140);
   }
 
   function formContextLabel(el) {
@@ -922,10 +956,7 @@
   }
 
   function actionKeyFor(labelNorm) {
-    for (const [key, pattern] of RISK_PATTERNS) {
-      if (pattern.test(labelNorm)) return key;
-    }
-    return '';
+    return NoWayAuto.directAction(labelNorm);
   }
 
   function actionLabel(actionKey) {
@@ -941,10 +972,6 @@
     if (!labelNorm) return false;
     if (normalizeText(actionKey) && labelNorm.includes(normalizeText(actionKey))) return true;
     return selectorTermsForAction(actionKey, labelNorm).some((term) => labelNorm.includes(normalizeText(term)));
-  }
-
-  function safeLabel(labelNorm) {
-    return SAFE_PATTERNS.some((pattern) => pattern.test(labelNorm));
   }
 
   function fallbackActionKey(eventKind, tag, inputType) {
@@ -976,15 +1003,6 @@
 
     let aria = el.getAttribute?.('aria-label');
     const role = el.getAttribute?.('role');
-
-    // If no label on the container, check immediate children (Instagram pattern where
-    // the svg icon has the label but the div/button is the actual target).
-    if (!aria && (tag === 'button' || role === 'button' || tag === 'a' || tag === 'div')) {
-      const labeledChild = el.querySelector?.('[aria-label]');
-      if (labeledChild) {
-        aria = labeledChild.getAttribute('aria-label');
-      }
-    }
 
     if (aria && actionKey) {
       for (const term of selectorTermsForAction(actionKey, normalizeText(label || aria))) {

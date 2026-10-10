@@ -61,7 +61,7 @@ Use the harness for browser-level verification when changing content scripts, po
 ## Implementation Guidelines
 
 - Keep site access per origin; do not request broad host access up front.
-- Keep detection local. Do not add remote or on-device model-based detection without prior discussion.
+- Keep detection local. Auto training is opt-in through Chrome's Prompt API; do not add remote inference or another model runtime without prior discussion.
 - Prefer stable selectors and accessible metadata over brittle classes or positional selectors.
 - Preserve rule changes taking effect in already-open same-origin tabs.
 - Keep injected content-script UI isolated from page CSS.

@@ -24,11 +24,12 @@ if (args.help) {
   process.exit(0);
 }
 
-let chromeResolution = resolveChromeForTesting(args.chrome);
+let chromeResolution = args.promptApi ? resolvePromptApiChrome(args.chrome) : resolveChromeForTesting(args.chrome);
 const url = args.url || defaultUrl;
 const devtools = args.devtools !== false;
 const keepProfile = Boolean(args.keepProfile);
-const seedProfile = args.seedProfile ? resolve(repoRoot, args.seedProfile) : null;
+const seedProfile = args.seedProfile ? resolve(repoRoot, args.seedProfile)
+  : args.promptApi ? resolve(repoRoot, '.harness/prompt-api-google') : null;
 const sourceProfile = args.profileSource === false
   ? null
   : resolve(repoRoot, args.profileSource || defaultProfileSource);
@@ -45,8 +46,10 @@ if (!chromeResolution.path && !chromeResolution.error && !args.chrome) {
 
 if (!chromeResolution.path) {
   console.error(chromeResolution.error || 'Could not find Chrome for Testing.');
-  console.error('Install Chrome for Testing with: node tools/install-chrome-for-testing.mjs');
-  console.error('Or pass --chrome /path/to/chrome-for-testing.');
+  if (!args.promptApi) {
+    console.error('Install Chrome for Testing with: node tools/install-chrome-for-testing.mjs');
+    console.error('Or pass --chrome /path/to/chrome-for-testing.');
+  }
   process.exit(1);
 }
 
@@ -74,8 +77,10 @@ if (seedProfile) {
 const chromeArgs = [
   `--user-data-dir=${userDataDir}`,
   '--profile-directory=Default',
-  `--disable-extensions-except=${repoRoot}`,
-  `--load-extension=${repoRoot}`,
+  ...(args.promptApi ? ['--enable-unsafe-extension-debugging'] : [
+    `--disable-extensions-except=${repoRoot}`,
+    `--load-extension=${repoRoot}`,
+  ]),
   '--no-first-run',
   '--no-default-browser-check',
   '--remote-debugging-port=0',
@@ -86,7 +91,7 @@ if (devtools) chromeArgs.push('--auto-open-devtools-for-tabs');
 chromeArgs.push(url);
 
 console.log(`Loading extension from: ${repoRoot}`);
-console.log(`Chrome for Testing: ${chromePath}`);
+console.log(`${args.promptApi ? 'Google Chrome for real Prompt API testing' : 'Chrome for Testing'}: ${chromePath}`);
 console.log(`Opening: ${url}`);
 console.log(`Module scout snippet: ${resolve(repoRoot, 'tools/module-scout.js')}`);
 
@@ -106,6 +111,11 @@ chrome.stderr.on('data', (chunk) => {
   if (match) {
     devtoolsBrowserUrl = match[1];
     console.log(`Chrome DevTools Protocol: ${devtoolsBrowserUrl}`);
+    if (args.promptApi) {
+      loadUnpackedExtension(devtoolsBrowserUrl)
+        .then((result) => console.log(`No Way! loaded through Chrome's developer API: ${result.id}`))
+        .catch((error) => console.error(`Extension load failed: ${error.message}. Load this repository manually through chrome://extensions/.`));
+    }
   }
 });
 
@@ -173,6 +183,35 @@ async function readDevToolsBrowserUrl() {
   return `ws://127.0.0.1:${port}${browserPath}`;
 }
 
+function loadUnpackedExtension(browserUrl) {
+  return new Promise((resolveLoad, rejectLoad) => {
+    const ws = new WebSocket(browserUrl);
+    const timeout = setTimeout(() => { ws.close(); rejectLoad(new Error('Extension loading timed out')); }, 15000);
+    ws.addEventListener('open', () => ws.send(JSON.stringify({ id: 1, method: 'Extensions.loadUnpacked', params: { path: repoRoot } })));
+    ws.addEventListener('message', (event) => {
+      const response = JSON.parse(event.data);
+      if (response.id !== 1) return;
+      clearTimeout(timeout);
+      ws.close();
+      if (response.error) rejectLoad(new Error(response.error.message));
+      else resolveLoad(response.result);
+    });
+    ws.addEventListener('error', () => { clearTimeout(timeout); rejectLoad(new Error('Developer API connection failed')); });
+    ws.addEventListener('close', () => { clearTimeout(timeout); rejectLoad(new Error('Developer API connection closed')); });
+  });
+}
+
+function resolvePromptApiChrome(explicitPath) {
+  const candidates = explicitPath ? [explicitPath] : platform() === 'darwin'
+    ? ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome']
+    : platform() === 'win32'
+      ? [resolve(process.env.PROGRAMFILES || 'C:/Program Files', 'Google/Chrome/Application/chrome.exe'),
+        resolve(process.env.LOCALAPPDATA || 'C:/Users/Default/AppData/Local', 'Google/Chrome/Application/chrome.exe')]
+      : ['/usr/bin/google-chrome-stable', '/usr/bin/google-chrome', '/opt/google/chrome/chrome'];
+  const path = candidates.find((candidate) => existsSync(candidate));
+  return path ? { path } : { error: 'Real Prompt API testing needs branded Google Chrome 138+. Install it or pass --chrome /path/to/google-chrome.' };
+}
+
 function sendBrowserClose(browserUrl) {
   return new Promise((resolveClose, rejectClose) => {
     const ws = new WebSocket(browserUrl);
@@ -230,6 +269,7 @@ function parseArgs(argv) {
     if (arg === '--help' || arg === '-h') parsed.help = true;
     else if (arg === '--url') parsed.url = readValue();
     else if (arg === '--chrome') parsed.chrome = readValue();
+    else if (arg === '--prompt-api') parsed.promptApi = true;
     else if (arg === '--profile-source') parsed.profileSource = readValue();
     else if (arg === '--no-profile-source') parsed.profileSource = false;
     else if (arg === '--seed-profile' || arg === '--persistent-profile') parsed.seedProfile = readValue();
@@ -334,7 +374,7 @@ function findChromeForTestingInVersionedDirs(installRoot, executableSuffix) {
   const dirs = readdirSync(installRoot, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
-    .sort()
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
     .reverse();
 
   for (const dir of dirs) {
@@ -428,7 +468,8 @@ Options:
   --persistent-profile DIR     Alias for --seed-profile.
   --keep-profile               Do not delete the temp profile when Chrome exits.
   --devtools / --no-devtools   Auto-open DevTools for tabs. Default: --devtools
-  --chrome PATH                Chrome for Testing executable path. CHROME_PATH also works.
+  --chrome PATH                Browser path: Google Chrome with --prompt-api, otherwise Chrome for Testing.
+  --prompt-api                 Use branded Google Chrome and a persistent model profile.
 
 Browser installation:
   node tools/install-chrome-for-testing.mjs
