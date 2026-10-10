@@ -330,8 +330,8 @@ function monitorSource() {
     const toasts = [...document.querySelectorAll('[data-noway-toast]')];
     const latestToast = toasts.at(-1);
     return {
-      blocked: Boolean(latestToast),
-      blockedLabel: cleanText(latestToast?.textContent),
+      blocked: latestToast?.getAttribute('data-noway-toast') === 'blocked',
+      blockedLabel: cleanText(latestToast?.shadowRoot?.querySelector('span')?.textContent || latestToast?.textContent),
     };
   }
 

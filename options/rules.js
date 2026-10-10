@@ -19,16 +19,22 @@ const els = {
   exportOrigins: document.getElementById('export-origins'),
   exportConfirm: document.getElementById('export-confirm'),
   exportCancel: document.getElementById('export-cancel'),
+  rawError: document.getElementById('raw-error'),
+  deleteModal: document.getElementById('delete-modal'),
+  deleteHelp: document.getElementById('delete-help'),
+  deleteError: document.getElementById('delete-error'),
+  deleteCancel: document.getElementById('delete-cancel'),
+  deleteConfirm: document.getElementById('delete-confirm'),
 };
 
 let exportSelection = new Set();
 
 const KEY_SEPARATOR = '\u001f';
-const FLASH_MESSAGE_KEY = 'noWayRulesFlashMessage';
 
 let view = null;
 let selectedRules = new Set();
 let editingRule = null;
+let pendingDeletion = [];
 
 els.deleteSelected.addEventListener('click', deleteSelectedRules);
 els.exportRules.addEventListener('click', openExportModal);
@@ -50,6 +56,15 @@ els.exportClearAll.addEventListener('click', () => {
   exportSelection.clear();
   renderExportModal();
 });
+els.deleteCancel.addEventListener('click', () => els.deleteModal.close());
+els.deleteConfirm.addEventListener('click', confirmDeletion);
+els.modal.addEventListener('close', () => { editingRule = null; });
+for (const dialog of [els.modal, els.exportModal, els.deleteModal]) {
+  dialog.addEventListener('close', () => restoreFocus(dialog.dataset.returnFocus));
+}
+chrome.runtime.onMessage.addListener((message) => {
+  if (message.type === 'NOWAY_STATE_CHANGED') loadRules();
+});
 
 loadRules();
 
@@ -58,17 +73,13 @@ async function loadRules() {
     view = await chrome.runtime.sendMessage({ type: 'NOWAY_GET_RULES' });
     if (!view?.ok) throw new Error(view?.error || 'Could not load rules');
     render();
-    const flashMessage = sessionStorage.getItem(FLASH_MESSAGE_KEY);
-    if (flashMessage) {
-      sessionStorage.removeItem(FLASH_MESSAGE_KEY);
-      setMessage(flashMessage);
-    }
   } catch (error) {
     setMessage(error.message || String(error));
   }
 }
 
 function render() {
+  const focusKey = document.activeElement?.dataset.focusKey;
   pruneSelection();
   renderSelectionState();
   els.origins.replaceChildren();
@@ -77,7 +88,7 @@ function render() {
   if (!entries.length) {
     const empty = document.createElement('div');
     empty.className = 'empty';
-    empty.textContent = 'No site rules yet. Enable training mode from the extension popup to start learning.';
+    empty.textContent = 'No rules yet. Turn on Training in No Way! to add rules.';
     els.origins.appendChild(empty);
     return;
   }
@@ -85,6 +96,23 @@ function render() {
   for (const [origin, originState] of entries) {
     els.origins.appendChild(renderOrigin(origin, originState));
   }
+  restoreFocus(focusKey);
+}
+
+function restoreFocus(key) {
+  if (key) [...document.querySelectorAll('[data-focus-key]')].find((el) => el.dataset.focusKey === key)?.focus();
+}
+
+function checkboxTarget(input) {
+  const target = document.createElement('label');
+  target.className = 'checkbox-target';
+  target.appendChild(input);
+  return target;
+}
+
+function openDialog(dialog) {
+  dialog.dataset.returnFocus = document.activeElement?.dataset.focusKey || '';
+  dialog.showModal();
 }
 
 function renderOrigin(origin, originState) {
@@ -101,20 +129,34 @@ function renderOrigin(origin, originState) {
   const meta = document.createElement('div');
   meta.className = 'origin-meta';
   meta.textContent = [
-    originState.permissionGranted ? 'access granted' : 'access not granted',
-    originState.trainingEnabled ? 'training on' : 'training off',
-    originState.protectionEnabled ? 'protection on' : 'protection off',
-    originState.protectionAllowOnce ? 'allow-once on' : 'allow-once off',
-  ].join(' | ');
+    originState.permissionGranted ? 'Access granted' : 'Access not granted',
+    originState.trainingEnabled ? (originState.auto?.strategy === 'auto' ? 'Auto training' : 'Manual training') : 'Training off',
+    originState.protectionEnabled ? 'Protection on' : 'Protection off',
+    originState.protectionAllowOnce ? 'Allow Once on' : 'Allow Once off',
+  ].join(' · ');
   titleWrap.appendChild(title);
   titleWrap.appendChild(meta);
 
   const count = document.createElement('div');
   count.className = 'origin-meta';
-  count.textContent = `${originState.rules.length} rules`;
+  count.textContent = `${originState.rules.length} rule${originState.rules.length === 1 ? '' : 's'}`;
 
   header.appendChild(titleWrap);
   header.appendChild(count);
+  if (originState.auto?.suppressedEvidenceKeys?.length) {
+    const retrain = document.createElement('button');
+    retrain.type = 'button';
+    retrain.textContent = 'Retrain removed actions';
+    retrain.title = 'Allow Auto to learn actions whose rules you previously disabled or deleted.';
+    retrain.addEventListener('click', async () => {
+      try {
+        const response = await chrome.runtime.sendMessage({ type: 'NOWAY_RETRAIN_AUTO', origin });
+        if (!response?.ok) throw new Error(response?.error || 'Could not reset removed actions.');
+        view = response; render(); setMessage('Auto can create these rules again.');
+      } catch (error) { setMessage(error.message); }
+    });
+    header.appendChild(retrain);
+  }
   section.appendChild(header);
 
   const table = document.createElement('table');
@@ -123,6 +165,14 @@ function renderOrigin(origin, originState) {
   const body = document.createElement('tbody');
   for (const rule of originState.rules) {
     body.appendChild(renderRule(origin, rule));
+  }
+  if (!originState.rules.length) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 7;
+    cell.className = 'empty-rules';
+    cell.textContent = 'No rules for this site. Turn on Training to add rules.';
+    row.appendChild(cell); body.appendChild(row);
   }
   table.appendChild(body);
   section.appendChild(table);
@@ -139,6 +189,7 @@ function renderHead(origin, originState) {
   const selectAll = document.createElement('input');
   selectAll.type = 'checkbox';
   selectAll.setAttribute('aria-label', `Select all rules for ${origin}`);
+  selectAll.dataset.focusKey = `${origin}|select-all`;
   const keys = originState.rules.map((rule) => selectionKey(origin, rule.id));
   const selectedCount = keys.filter((key) => selectedRules.has(key)).length;
   selectAll.checked = keys.length > 0 && selectedCount === keys.length;
@@ -151,11 +202,12 @@ function renderHead(origin, originState) {
     }
     render();
   });
-  selectAllCell.appendChild(selectAll);
+  selectAllCell.appendChild(checkboxTarget(selectAll));
   row.appendChild(selectAllCell);
 
   for (const label of ['Enabled', 'Kind', 'Rule', 'Action', 'Hits', 'Actions']) {
     const th = document.createElement('th');
+    th.scope = 'col';
     th.textContent = label;
     row.appendChild(th);
   }
@@ -166,6 +218,7 @@ function renderHead(origin, originState) {
 function renderRule(origin, rule) {
   const row = document.createElement('tr');
   const key = selectionKey(origin, rule.id);
+  row.classList.toggle('selected', selectedRules.has(key));
 
   const selectCell = document.createElement('td');
   selectCell.className = 'select-cell';
@@ -173,19 +226,22 @@ function renderRule(origin, rule) {
   selected.type = 'checkbox';
   selected.checked = selectedRules.has(key);
   selected.setAttribute('aria-label', `Select ${rule.label || rule.id}`);
+  selected.dataset.focusKey = `${key}|select`;
   selected.addEventListener('change', () => {
     if (selected.checked) selectedRules.add(key);
     else selectedRules.delete(key);
     render();
   });
-  selectCell.appendChild(selected);
+  selectCell.appendChild(checkboxTarget(selected));
 
   const enabledCell = document.createElement('td');
   const enabled = document.createElement('input');
   enabled.type = 'checkbox';
   enabled.checked = rule.enabled;
+  enabled.setAttribute('aria-label', `Enable ${rule.label || 'rule'}`);
+  enabled.dataset.focusKey = `${key}|enabled`;
   enabled.addEventListener('change', () => updateRule(origin, rule.id, { enabled: enabled.checked }));
-  enabledCell.appendChild(enabled);
+  enabledCell.appendChild(checkboxTarget(enabled));
 
   const kindCell = document.createElement('td');
   const currentKind = rule.kind === 'allow' ? 'allow' : 'block';
@@ -198,6 +254,8 @@ function renderRule(origin, rule) {
   } else {
     const kind = document.createElement('select');
     kind.className = `rule-kind rule-kind-${currentKind}`;
+    kind.setAttribute('aria-label', `Rule kind for ${rule.label || 'rule'}`);
+    kind.dataset.focusKey = `${key}|kind`;
     for (const [value, text] of [['block', 'Block'], ['allow', 'Allow']]) {
       const option = document.createElement('option');
       option.value = value;
@@ -215,11 +273,23 @@ function renderRule(origin, rule) {
   label.textContent = rule.label || 'Rule';
   const source = document.createElement('div');
   source.className = 'rule-source';
-  source.textContent = `${rule.source || 'learned'} · ${rule.id}`;
+  const sourceBadge = document.createElement('span');
+  sourceBadge.className = `rule-source-badge${rule.autoLearned ? ' automatic' : ''}`;
+  sourceBadge.textContent = rule.source === 'starter' ? 'Starter'
+    : rule.autoLearned ? (rule.autoDetector === 'nano' ? 'Auto · AI' : 'Auto') : 'Manual';
+  sourceBadge.title = rule.source === 'starter' ? 'Included with No Way!'
+    : rule.autoDetector === 'nano' ? 'Created by Auto using Gemini Nano'
+      : rule.autoLearned ? 'Created by Auto using action matching' : 'Created through manual training or imported';
+  source.appendChild(sourceBadge);
+  const identifier = document.createElement('span');
+  identifier.className = 'rule-id';
+  identifier.textContent = rule.id;
+  source.appendChild(identifier);
   labelCell.appendChild(label);
   labelCell.appendChild(source);
 
   const actionCell = document.createElement('td');
+  actionCell.className = 'action-key';
   actionCell.textContent = rule.actionKey || '-';
 
   const hitsCell = document.createElement('td');
@@ -227,18 +297,21 @@ function renderRule(origin, rule) {
 
   const actionsCell = document.createElement('td');
   const actionWrap = document.createElement('div');
-  actionWrap.style.display = 'flex';
-  actionWrap.style.gap = '6px';
+  actionWrap.className = 'rule-actions';
 
   const raw = document.createElement('button');
   raw.type = 'button';
-  raw.textContent = 'Raw';
+  raw.textContent = 'Edit JSON';
+  raw.setAttribute('aria-label', `Edit JSON for ${rule.label || 'rule'}`);
+  raw.dataset.focusKey = `${key}|edit`;
   raw.addEventListener('click', () => showRawEditor(origin, rule));
 
   const remove = document.createElement('button');
   remove.type = 'button';
   remove.className = 'danger';
   remove.textContent = 'Delete';
+  remove.setAttribute('aria-label', `Delete ${rule.label || 'rule'}`);
+  remove.dataset.focusKey = `${key}|delete`;
   remove.addEventListener('click', () => deleteRule(origin, rule.id));
 
   actionWrap.appendChild(raw);
@@ -258,12 +331,14 @@ function renderRule(origin, rule) {
 function showRawEditor(origin, rule) {
   editingRule = { origin, ruleId: rule.id };
   els.rawJson.value = JSON.stringify(rule, null, 2);
-  els.modal.removeAttribute('hidden');
+  els.rawError.textContent = '';
+  els.rawJson.removeAttribute('aria-invalid');
+  openDialog(els.modal);
   els.rawJson.focus();
 }
 
 function hideModal() {
-  els.modal.setAttribute('hidden', '');
+  els.modal.close();
   editingRule = null;
 }
 
@@ -273,16 +348,20 @@ async function saveRawRule() {
   try {
     changes = JSON.parse(els.rawJson.value);
   } catch (error) {
-    alert(`Invalid JSON: ${error.message}`);
+    els.rawError.textContent = `Invalid JSON: ${error.message}`;
+    els.rawJson.setAttribute('aria-invalid', 'true');
     return;
   }
 
   try {
-    await updateRule(editingRule.origin, editingRule.ruleId, changes);
-    hideModal();
+    els.rawError.textContent = '';
+    els.rawJson.removeAttribute('aria-invalid');
+    els.saveRaw.disabled = true;
+    if (await updateRule(editingRule.origin, editingRule.ruleId, changes)) hideModal();
+    else els.rawError.textContent = els.message.textContent;
   } catch (error) {
     setMessage(error.message || String(error));
-  }
+  } finally { els.saveRaw.disabled = false; }
 }
 
 async function updateRule(origin, ruleId, changes) {
@@ -297,9 +376,11 @@ async function updateRule(origin, ruleId, changes) {
     view = response;
     render();
     setMessage('Rule updated.');
+    return true;
   } catch (error) {
     setMessage(error.message || String(error));
     await loadRules();
+    return false;
   }
 }
 
@@ -325,8 +406,16 @@ async function deleteSelectedRules() {
   if (!items.length) return;
 
   const label = `${items.length} selected rule${items.length === 1 ? '' : 's'}`;
-  if (!confirm(`Delete ${label}? Starter rules will stay removed for this site.`)) return;
+  pendingDeletion = items;
+  els.deleteHelp.textContent = `${label} will be deleted. This can’t be undone.`;
+  els.deleteError.textContent = '';
+  openDialog(els.deleteModal);
+}
 
+async function confirmDeletion() {
+  const items = pendingDeletion;
+  if (!items.length) return;
+  els.deleteConfirm.disabled = true;
   try {
     const response = await chrome.runtime.sendMessage({
       type: 'NOWAY_DELETE_RULES',
@@ -336,12 +425,14 @@ async function deleteSelectedRules() {
     view = response;
     selectedRules.clear();
     render();
-    sessionStorage.setItem(FLASH_MESSAGE_KEY, `Deleted ${label}.`);
-    window.location.reload();
+    els.deleteModal.close();
+    pendingDeletion = [];
+    setMessage(`Deleted ${items.length} rule${items.length === 1 ? '' : 's'}.`);
   } catch (error) {
+    els.deleteError.textContent = error.message || String(error);
     setMessage(error.message || String(error));
     await loadRules();
-  }
+  } finally { els.deleteConfirm.disabled = false; }
 }
 
 function openExportModal() {
@@ -353,11 +444,11 @@ function openExportModal() {
   // Default to all selected so the common "export everything" case is one click.
   exportSelection = new Set(origins);
   renderExportModal();
-  els.exportModal.removeAttribute('hidden');
+  openDialog(els.exportModal);
 }
 
 function hideExportModal() {
-  els.exportModal.setAttribute('hidden', '');
+  els.exportModal.close();
 }
 
 function renderExportModal() {
@@ -449,7 +540,7 @@ async function importRules() {
     if (!response?.ok) throw new Error(response?.error || 'Import failed');
     view = response;
     render();
-    setMessage('Rules imported.');
+    setMessage('Rules imported. Auto is off for imported sites.');
   } catch (error) {
     setMessage(error.message || String(error));
   }

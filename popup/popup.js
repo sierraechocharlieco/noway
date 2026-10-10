@@ -1,3 +1,9 @@
+// Chrome sizes toolbar popups from their contents. A viewport-relative cap
+// otherwise feeds its temporary opening width back into the final layout.
+if ((chrome.extension?.getViews?.({ type: 'popup' }) || []).includes(window)) {
+  document.documentElement.classList.add('toolbar-popup');
+}
+
 const els = {
   dot: document.getElementById('status-dot'),
   status: document.getElementById('status-text'),
@@ -5,6 +11,10 @@ const els = {
   grant: document.getElementById('grant-access'),
   training: document.getElementById('training-toggle'),
   protection: document.getElementById('protection-toggle'),
+  auto: document.getElementById('auto-toggle'),
+  autoStatusRow: document.getElementById('auto-status-row'),
+  autoStatus: document.getElementById('auto-status'),
+  openModel: document.getElementById('open-model'),
   allowOnce: document.getElementById('allow-once-toggle'),
   debug: document.getElementById('debug-toggle'),
   ruleCount: document.getElementById('rule-count'),
@@ -35,6 +45,22 @@ async function init() {
   els.training.addEventListener('change', async () => {
     await setFlags({ trainingEnabled: els.training.checked });
   });
+
+  els.auto.addEventListener('change', setAuto);
+  document.querySelector('.auto-row').addEventListener('click', (event) => {
+    if (!els.auto.disabled && !event.target.closest('button,input,label,.tooltip')) els.auto.click();
+  });
+  els.openModel.addEventListener('click', openModelPanel);
+  const info = document.getElementById('auto-info');
+  const tooltip = info.parentElement;
+  const resetTooltip = () => tooltip.classList.remove('dismissed');
+  info.addEventListener('pointerenter', resetTooltip);
+  info.addEventListener('focus', resetTooltip);
+  info.addEventListener('click', () => { resetTooltip(); tooltip.classList.toggle('open'); });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') { tooltip.classList.remove('open'); tooltip.classList.add('dismissed'); }
+  });
+  chrome.runtime.onMessage.addListener((message) => { if (message.type === 'NOWAY_STATE_CHANGED') refresh(); });
 
   els.protection.addEventListener('change', async () => {
     await setFlags({ protectionEnabled: els.protection.checked });
@@ -67,6 +93,7 @@ async function refresh() {
     currentState = await chrome.runtime.sendMessage({
       type: 'NOWAY_GET_POPUP_STATE',
       tabUrl: tabUrl(currentTab),
+      tabId: currentTab?.id,
     });
     render();
   } catch (error) {
@@ -121,15 +148,26 @@ function render() {
     els.status.textContent = 'Access needed';
   } else if (training) {
     els.dot.classList.add('training');
-    els.status.textContent = 'Training active';
+    if (currentState.auto?.strategy === 'auto' && !currentState.auto.ready) els.dot.classList.add('paused');
+    els.status.textContent = currentState.auto?.strategy === 'auto'
+      ? (currentState.auto.ready ? 'Auto is on' : 'Auto needs setup') : 'Training is on';
   } else if (protection) {
     els.dot.classList.add('active');
-    els.status.textContent = 'Protection active';
+    els.status.textContent = 'Protection is on';
   } else {
     els.status.textContent = 'Access granted';
   }
 
   els.grant.hidden = !supported || hasAccess;
+  const auto = currentState?.auto?.strategy === 'auto';
+  document.querySelector('.auto-row').classList.toggle('auto-selected', auto);
+  els.auto.checked = auto;
+  els.auto.disabled = !supported || !hasAccess || busy || !chrome.sidePanel?.open;
+  els.autoStatusRow.hidden = !auto;
+  els.autoStatus.hidden = training;
+  els.autoStatus.textContent = !training ? 'Turn on Training to use Auto.'
+    : currentState.auto?.ready ? 'Keep the model panel open.' : 'Start the model to use Auto.';
+  els.openModel.disabled = busy || !chrome.sidePanel?.open;
   els.training.checked = training;
   els.protection.checked = protection;
   els.allowOnce.checked = Boolean(originState.protectionAllowOnce);
@@ -144,9 +182,9 @@ function render() {
   els.openRules.disabled = busy;
 
   if (!supported) {
-    setMessage('Open an http or https site to train No Way!.');
+    setMessage('Open a website to get started.');
   } else if (!hasAccess) {
-    setMessage('Grant this origin before enabling training or protection.');
+    setMessage('Allow access to use No Way! on this site.');
   } else {
     setMessage('');
   }
@@ -175,7 +213,7 @@ async function setFlags(flags) {
   }
 
   setBusy(true);
-  els.syncStatus.textContent = 'Syncing…';
+  els.syncStatus.textContent = 'Saving…';
   try {
     const response = await chrome.runtime.sendMessage({
       type: 'NOWAY_SET_ORIGIN_FLAGS',
@@ -185,6 +223,7 @@ async function setFlags(flags) {
     });
     if (!response?.ok) throw new Error(response?.error || 'Could not update site state');
     currentState.originState = response.originState;
+    currentState.auto = response.auto;
     currentState.permissionGranted = response.permissionGranted;
 
     const anyFailed = Array.isArray(response.tabSyncResults)
@@ -203,6 +242,28 @@ async function setFlags(flags) {
   } finally {
     setBusy(false);
   }
+}
+
+function openModelPanel() {
+  if (!currentTab?.windowId || !chrome.sidePanel?.open) return Promise.resolve();
+  return chrome.sidePanel.open({ windowId: currentTab.windowId }).catch((error) => setMessage(error.message));
+}
+
+async function setAuto() {
+  if (!currentState?.origin) return;
+  const enabled = els.auto.checked;
+  // Open immediately, while the popup's user activation is still present.
+  const opening = enabled ? openModelPanel() : Promise.resolve();
+  setBusy(true);
+  try {
+    const response = await chrome.runtime.sendMessage({ type: 'NOWAY_SET_AUTO', origin: currentState.origin, enabled, tabId: currentTab?.id });
+    if (!response?.ok) throw new Error(response?.error || 'Could not update Auto.');
+    await opening;
+    await refresh();
+  } catch (error) {
+    await refresh();
+    setMessage(error.message || String(error));
+  } finally { setBusy(false); }
 }
 
 async function setDebugFlag(enabled) {
@@ -252,8 +313,8 @@ async function importRules() {
     const payload = JSON.parse(await file.text());
     const response = await chrome.runtime.sendMessage({ type: 'NOWAY_IMPORT_RULES', payload });
     if (!response?.ok) throw new Error(response?.error || 'Import failed');
-    setMessage('Rules imported.');
     await refresh();
+    setMessage('Rules imported. Auto is off for imported sites.');
   } catch (error) {
     setMessage(error.message || String(error));
   }
@@ -262,7 +323,7 @@ async function importRules() {
 function setBusy(nextBusy) {
   busy = nextBusy;
   // Only re-render when becoming non-busy; becoming busy is handled by optimistic updates.
-  if (!busy && currentState) render();
+  if (currentState) render();
 }
 
 function setMessage(text) {

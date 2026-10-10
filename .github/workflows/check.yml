@@ -24,6 +24,12 @@ jobs:
       - name: Check extension and tool scripts
         run: |
           node --check background/service_worker.js
+          node --check background/auto-training.js
+          node --check shared/auto.js
+          node --check shared/auto-main.js
+          node --check shared/brand.js
+          node --check ai/classifier.js
+          node --check ai/sidepanel.js
           node --check content/guard-main.js
           node --check content/guard-controller.js
           node --check popup/popup.js
@@ -33,3 +39,8 @@ jobs:
           node --check tools/install-chrome-for-testing.mjs
           node --check tools/module-scout.js
           node --check tools/print-scout-snippet.mjs
+          node --check tests/browser-auto.mjs
+          node --check tests/native-popup.mjs
+          node --check tests/classification-browser.mjs
+      - name: Check policy and model lifecycle
+        run: node --test tests/auto.test.mjs

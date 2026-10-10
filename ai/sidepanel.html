@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>No Way! Auto training</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <header class="brand-header">
+    <img src="../assets/betta-mark.png" width="44" height="44" alt="">
+    <div><span class="wordmark">No Way!</span><span class="byline">Sierra Echo Charlie</span></div>
+  </header>
+  <main>
+    <h1>Auto training</h1>
+    <section class="model-card" aria-labelledby="model-title">
+      <div class="model-heading"><span class="model-dot" id="model-dot"></span><h2 id="model-title">Local model</h2><span class="model-name">Gemini Nano</span></div>
+      <p id="model-status" role="status" aria-live="polite">Checking availability…</p>
+      <progress id="download-progress" max="1" value="0" aria-label="Model download progress" hidden></progress>
+      <button id="setup-model" class="primary" type="button" disabled>Set Up Model</button>
+      <button id="cancel-setup" type="button" hidden>Cancel</button>
+      <p class="model-footnote">Checks run on your device.</p>
+    </section>
+    <section class="site-section" aria-labelledby="site-heading">
+      <h2 id="site-heading">Current site</h2>
+      <p id="current-site" class="site-name">Checking…</p>
+      <p id="site-status" class="muted" role="status"></p>
+    </section>
+    <p class="keep-open">Keep this panel open to use Auto. When it’s closed, you’ll review actions manually.</p>
+    <div class="panel-actions"><button id="manage-rules" type="button">Manage Rules</button><a href="https://developer.chrome.com/docs/ai/get-started" target="_blank" rel="noopener noreferrer">Device requirements</a></div>
+    <p id="panel-error" class="error" role="alert"></p>
+  </main>
+  <script src="../shared/auto.js"></script>
+  <script src="classifier.js"></script>
+  <script src="sidepanel.js"></script>
+</body>
+</html>

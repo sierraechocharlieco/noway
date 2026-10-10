@@ -1,3 +1,5 @@
+importScripts('../shared/auto.js', 'auto-training.js');
+
 let debugEnabled = false;
 
 function debugLog(entry) {
@@ -182,21 +184,21 @@ const LINKEDIN_STARTER_RULES = [
 ];
 
 addChromeListener(chrome.runtime.onInstalled, () => {
-  bootExtension().catch((error) => console.error('[No Way!]', error));
+  serializeWork(bootExtension).catch((error) => console.error('[No Way!]', error));
 });
 
 addChromeListener(chrome.runtime.onStartup, () => {
-  bootExtension().catch((error) => console.error('[No Way!]', error));
+  serializeWork(bootExtension).catch((error) => console.error('[No Way!]', error));
 });
 
 addChromeListener(chrome.permissions?.onAdded, (permissions) => {
   if (!permissions.origins?.length) return;
-  syncRegisteredContentScripts().catch((error) => console.error('[No Way!]', error));
+  serializeWork(syncRegisteredContentScripts).catch((error) => console.error('[No Way!]', error));
 });
 
 addChromeListener(chrome.permissions?.onRemoved, (permissions) => {
   if (!permissions.origins?.length) return;
-  handleRemovedHostPermissions(permissions.origins).catch((error) => console.error('[No Way!]', error));
+  serializeWork(() => handleRemovedHostPermissions(permissions.origins)).catch((error) => console.error('[No Way!]', error));
 });
 
 addChromeListener(chrome.tabs?.onActivated, (activeInfo) => {
@@ -224,7 +226,8 @@ addChromeListener(chrome.tabs?.onUpdated, (tabId, changeInfo, tab) => {
 
 
 addChromeListener(chrome.runtime.onMessage, (message, sender, sendResponse) => {
-  handleMessage(message, sender)
+  const work = () => handleMessage(message, sender);
+  (message?.type === 'NOWAY_AUTO_CLASSIFY' ? work() : serializeWork(work))
     .then(sendResponse)
     .catch((error) => {
       console.error('[No Way!]', error);
@@ -242,6 +245,7 @@ function addChromeListener(event, handler) {
 async function bootExtension() {
   await restrictStorageToTrustedContexts();
   await loadDebugFlag();
+  await loadAutoStore();
   await ensureStore();
   await syncRegisteredContentScripts();
 }
@@ -271,9 +275,21 @@ async function restrictStorageToTrustedContexts() {
 }
 
 async function handleMessage(message = {}, sender = {}) {
+  await loadAutoStore();
+  const contentMessages = ['NOWAY_GET_PAGE_STATE', 'NOWAY_CREATE_RULE', 'NOWAY_ALWAYS_ALLOW_RULE',
+    'NOWAY_RECORD_HIT', 'NOWAY_AUTO_CLASSIFY', 'NOWAY_AUTO_COMMIT'];
+  if (!contentMessages.includes(message.type) && !trustedExtensionSender(sender)) throw new Error('Extension UI required.');
   switch (message.type) {
     case 'NOWAY_GET_POPUP_STATE':
-      return getPopupState(message.tabUrl);
+      return getPopupState(message.tabUrl, message.tabId);
+    case 'NOWAY_AUTO_CLASSIFY':
+      return classifyAuto(message, sender);
+    case 'NOWAY_AUTO_COMMIT':
+      return commitAuto(message, sender);
+    case 'NOWAY_SET_AUTO':
+      return setAutoStrategy(message.origin, Boolean(message.enabled), message.tabId);
+    case 'NOWAY_RETRAIN_AUTO':
+      return retrainAuto(message.origin);
     case 'NOWAY_SET_ORIGIN_FLAGS':
       return setOriginFlags(message.origin, {
         trainingEnabled: message.trainingEnabled,
@@ -324,7 +340,7 @@ async function broadcastStateToAllGuardedTabs() {
   } catch (_) {}
 }
 
-async function getPopupState(tabUrl) {
+async function getPopupState(tabUrl, tabId) {
   const page = parsePageUrl(tabUrl);
   if (!page) {
     return { ok: true, supported: false, origin: '', hostname: '', permissionGranted: false };
@@ -338,8 +354,10 @@ async function getPopupState(tabUrl) {
     await setStore(store);
   }
 
+  const tab = tabId ? await chrome.tabs.get(tabId).catch(() => null) : null;
   return {
     ok: true,
+    auto: autoRuntimeState(page.origin, originState || createOriginState(), tab?.windowId),
     supported: true,
     origin: page.origin,
     hostname: page.hostname,
@@ -380,13 +398,14 @@ async function setOriginFlags(origin, flags, tabId) {
   return {
     ok: true,
     originState: sanitizeOriginState(originState),
+    auto: autoRuntimeState(origin, originState, (tabId ? await chrome.tabs.get(tabId).catch(() => null) : null)?.windowId),
     permissionGranted: await hasHostPermission(origin),
     tabSyncResults,
   };
 }
 
 async function getPageStateForSender(sender) {
-  const page = parsePageUrl(sender.tab?.url || sender.url);
+  const page = parsePageUrl(sender.url || sender.tab?.url);
   if (!page || !await hasHostPermission(page.origin)) {
     debugLog({ stage: 'pageState', origin: page?.origin || '', granted: false });
     return pageState(null, null);
@@ -398,11 +417,11 @@ async function getPageStateForSender(sender) {
   const changed = applyStarterRules(originState, page.origin);
   if (changed) await setStore(store);
 
-  return pageState(page.origin, originState);
+  return pageState(page.origin, originState, sender.tab?.windowId);
 }
 
 async function createRuleForSender(sender, candidate) {
-  const page = parsePageUrl(sender.tab?.url || sender.url);
+  const page = parsePageUrl(sender.url || sender.tab?.url);
   if (!page || !await hasHostPermission(page.origin)) {
     throw new Error('Cannot create a rule without page access.');
   }
@@ -442,11 +461,12 @@ async function createRuleForSender(sender, candidate) {
   await setStore(store);
   await refreshOriginTabs(page.origin);
 
-  return pageState(page.origin, originState);
+  return { ...pageState(page.origin, originState, sender.tab?.windowId),
+    savedRuleId: duplicate?.id || originState.rules[originState.rules.length - 1].id };
 }
 
 async function allowRuleForSender(sender, candidate) {
-  const page = parsePageUrl(sender.tab?.url || sender.url);
+  const page = parsePageUrl(sender.url || sender.tab?.url);
   if (!page || !await hasHostPermission(page.origin)) {
     throw new Error('Cannot create a rule without page access.');
   }
@@ -485,12 +505,12 @@ async function allowRuleForSender(sender, candidate) {
   await setStore(store);
   await refreshOriginTabs(page.origin);
 
-  return pageState(page.origin, originState);
+  return pageState(page.origin, originState, sender.tab?.windowId);
 }
 
 async function recordRuleHitForSender(sender, ruleId) {
-  const page = parsePageUrl(sender.tab?.url || sender.url);
-  if (!page || !ruleId) return { ok: true };
+  const page = parsePageUrl(sender.url || sender.tab?.url);
+  if (!page || !ruleId || !await hasHostPermission(page.origin)) return { ok: true };
 
   const store = await getStore();
   const originState = store.origins[page.origin];
@@ -534,6 +554,7 @@ async function importRules(payload) {
 
   for (const [origin, incomingState] of Object.entries(imported.origins)) {
     const originState = ensureOriginState(store, origin);
+    autoStore.origins[origin] = { ...autoSettings(origin), strategy: 'manual' };
     originState.trainingEnabled = Boolean(incomingState.trainingEnabled);
     originState.protectionEnabled = Boolean(incomingState.protectionEnabled);
     originState.protectionAllowOnce = Boolean(incomingState.protectionAllowOnce);
@@ -543,6 +564,7 @@ async function importRules(payload) {
     const existingById = new Map(originState.rules.map((rule) => [rule.id, rule]));
     for (const incomingRule of incomingState.rules) {
       existingById.set(incomingRule.id, incomingRule);
+      delete autoStore.ruleProvenance[`${origin}|${incomingRule.id}`];
     }
     originState.rules = [...existingById.values()];
     removeDeletedStarterRules(originState);
@@ -550,6 +572,7 @@ async function importRules(payload) {
     touchedOrigins.add(origin);
   }
 
+  await saveAutoStore();
   await setStore(store);
   await syncRegisteredContentScripts();
   await Promise.all([...touchedOrigins].map((origin) => refreshOriginTabs(origin)));
@@ -563,6 +586,12 @@ async function getRulesView() {
     origins[origin] = {
       ...sanitizeOriginState(originState),
       permissionGranted: await hasHostPermission(origin),
+      auto: autoSettings(origin),
+      rules: sanitizeOriginState(originState).rules.map((rule) => {
+        const provenance = autoStore?.ruleProvenance[`${origin}|${rule.id}`];
+        return { ...rule, autoLearned: Boolean(provenance),
+          autoDetector: provenance?.detector === 'nano' ? 'nano' : provenance?.detector === 'heuristic' ? 'heuristic' : null };
+      }),
     };
   }
 
@@ -571,10 +600,12 @@ async function getRulesView() {
 
 async function updateRule(origin, ruleId, changes = {}) {
   assertOrigin(origin);
+  if (!changes || typeof changes !== 'object' || Array.isArray(changes)) throw new Error('Rule changes must be a JSON object.');
   const store = await getStore();
   const rule = store.origins[origin]?.rules?.find((item) => item.id === ruleId);
   if (!rule) throw new Error('Rule not found.');
 
+  const originalRule = structuredClone(rule);
   if (typeof changes.enabled === 'boolean') rule.enabled = changes.enabled;
   if (changes.kind === 'allow' || changes.kind === 'block') {
     if (rule.source === 'starter' && changes.kind !== 'block') {
@@ -592,7 +623,7 @@ async function updateRule(origin, ruleId, changes = {}) {
   }
 
   rule.updatedAt = nowIso();
-
+  if (changes.enabled === false) await suppressAutoRule(origin, originalRule);
   await setStore(store);
   await refreshOriginTabs(origin);
   return getRulesView();
@@ -617,6 +648,8 @@ async function deleteRules(items = []) {
 
     const originState = store.origins[origin];
     if (!originState) continue;
+    const removedRule = originState.rules.find((rule) => rule.id === ruleId);
+    if (removedRule) await suppressAutoRule(origin, removedRule, true);
     if (!removeRuleFromOrigin(originState, ruleId)) continue;
 
     originState.updatedAt = timestamp;
@@ -634,20 +667,25 @@ async function deleteRules(items = []) {
 async function handleRemovedHostPermissions(origins) {
   const store = await getStore();
   let changed = false;
+  const revoked = [];
+  // Chrome may report wildcard host grants, or a host without an origin's port.
+  // Recheck the actual grant rather than treating the removed pattern as a URL.
+  for (const origin of Object.keys(store.origins)) {
+    if (await hasHostPermission(origin)) continue;
 
-  for (const pattern of origins) {
-    const origin = originFromMatchPattern(pattern);
-    if (!origin || !store.origins[origin]) continue;
-
+    autoStore.origins[origin] = { ...autoSettings(origin), strategy: 'manual' };
     store.origins[origin].trainingEnabled = false;
     store.origins[origin].protectionEnabled = false;
     store.origins[origin].protectionAllowOnce = false;
     store.origins[origin].updatedAt = nowIso();
     changed = true;
+    revoked.push(origin);
   }
 
-  if (changed) await setStore(store);
+  if (changed) { await saveAutoStore(); await setStore(store); }
   await syncRegisteredContentScripts();
+  await Promise.all(revoked.map((origin) => refreshOriginTabs(origin)));
+  await broadcastStateToAllGuardedTabs();
 }
 
 async function syncRegisteredContentScripts() {
@@ -667,7 +705,7 @@ async function syncRegisteredContentScripts() {
 async function syncOriginContentScripts(origin, originState) {
   const ids = contentScriptIds(origin);
   try {
-    await chrome.scripting.unregisterContentScripts({ ids });
+    await chrome.scripting.unregisterContentScripts({ ids: Object.values(ids) });
   } catch (_) {}
 
   if (!originState.trainingEnabled && !originState.protectionEnabled) return;
@@ -677,7 +715,7 @@ async function syncOriginContentScripts(origin, originState) {
     {
       id: ids.main,
       matches: [matchPatternFromOrigin(origin)],
-      js: [MAIN_SCRIPT],
+      js: ['shared/auto-main.js', MAIN_SCRIPT],
       runAt: 'document_start',
       world: 'MAIN',
       allFrames: true,
@@ -686,7 +724,7 @@ async function syncOriginContentScripts(origin, originState) {
     {
       id: ids.controller,
       matches: [matchPatternFromOrigin(origin)],
-      js: [CONTROLLER_SCRIPT],
+      js: ['shared/auto.js', 'shared/brand.js', CONTROLLER_SCRIPT],
       runAt: 'document_start',
       world: 'ISOLATED',
       allFrames: true,
@@ -700,12 +738,12 @@ async function injectIntoTab(tabId) {
     debugLog({ stage: 'inject', tabId });
     await chrome.scripting.executeScript({
       target: { tabId, allFrames: true },
-      files: [MAIN_SCRIPT],
+      files: ['shared/auto-main.js', MAIN_SCRIPT],
       world: 'MAIN',
     });
     await chrome.scripting.executeScript({
       target: { tabId, allFrames: true },
-      files: [CONTROLLER_SCRIPT],
+      files: ['shared/auto.js', 'shared/brand.js', CONTROLLER_SCRIPT],
       world: 'ISOLATED',
     });
     debugLog({ stage: 'inject', tabId, result: 'ok' });
@@ -717,12 +755,15 @@ async function injectIntoTab(tabId) {
 
 async function syncTabState(tabId, origin, retries = 3) {
   const store = await getStore();
-  const state = pageState(origin, store.origins[origin] || createOriginState());
+  const tab = await chrome.tabs.get(tabId).catch(() => null);
+  const granted = await hasHostPermission(origin);
+  const state = granted ? pageState(origin, store.origins[origin] || createOriginState(), tab?.windowId) : pageState(null, null);
   let injected = false;
 
   for (let attempt = 1; attempt <= retries; attempt += 1) {
     const pong = await pingTab(tabId);
     if (!pong) {
+      if (!granted) return { tabId, ok: true, injected: false };
       debugLog({ stage: 'syncTabState', tabId, attempt, result: 'ping-miss' });
       try {
         await injectIntoTab(tabId);
@@ -779,13 +820,19 @@ async function refreshOriginTabs(origin, options = {}) {
     if (options.fallbackTabId) tabIds.add(options.fallbackTabId);
 
     const results = await Promise.all([...tabIds].map((tabId) => syncTabState(tabId, origin)));
+    // Granted cross-origin frames may live inside tabs with a different top origin.
+    const otherTabs = await chrome.tabs.query({});
+    await Promise.all(otherTabs.filter((tab) => !tabIds.has(tab.id)).map((tab) =>
+      chrome.tabs.sendMessage(tab.id, { type: 'NOWAY_STATE_CHANGED', changedOrigin: origin }).catch(() => {})));
+    // Extension documents do not receive tabs.sendMessage (content scripts do).
+    chrome.runtime.sendMessage({ type: 'NOWAY_STATE_CHANGED', changedOrigin: origin }).catch(() => {});
     return results;
   } catch (_) {
     return [];
   }
 }
 
-function pageState(origin, originState) {
+function pageState(origin, originState, windowId) {
   if (!origin || !originState) {
     return {
       ok: true,
@@ -805,6 +852,7 @@ function pageState(origin, originState) {
   return {
     ok: true,
     origin,
+    auto: autoRuntimeState(origin, originState, windowId),
     trainingEnabled: Boolean(originState.trainingEnabled),
     protectionEnabled: Boolean(originState.protectionEnabled),
     protectionAllowOnce: Boolean(originState.protectionAllowOnce),
@@ -893,7 +941,7 @@ function createOriginState() {
 }
 
 function hasStarterRules(origin) {
-  return new URL(origin).hostname === 'www.linkedin.com';
+  return origin === 'https://www.linkedin.com';
 }
 
 function applyStarterRules(originState, origin) {
@@ -951,6 +999,9 @@ function findDuplicateRule(rules, candidate) {
   return rules.find((rule) => {
     if (rule.source === 'starter') return false;
     if (rule.actionKey !== candidate.actionKey) return false;
+    if (rule.match?.autoEvidence || candidate.match.autoEvidence) {
+      return NoWayAuto.key(rule.match?.autoEvidence) === NoWayAuto.key(candidate.match.autoEvidence);
+    }
     if (normalizeText(rule.match?.label || rule.label) !== normalizeText(candidate.match.label)) return false;
     return true;
   });
@@ -976,7 +1027,13 @@ function normalizeCandidate(candidate) {
   };
 }
 
+function validAutoMatch(value) {
+  return value && Object.keys(value).filter((name) => name !== 'navigation').sort().join(',') === 'attributes,context,eventKind,inputType,label,role,tag'
+    && NoWayAuto.validateEvidence({ ...value, language: 'en' });
+}
+
 function sanitizeMatch(match = {}) {
+  if (match.autoEvidence && !validAutoMatch(match.autoEvidence)) throw new Error('Invalid automatic rule evidence.');
   return {
     selectors: sanitizeStringArray(match.selectors, 20, 240),
     textLabels: sanitizeStringArray(match.textLabels, 30, 120).map(normalizeText),
@@ -989,6 +1046,7 @@ function sanitizeMatch(match = {}) {
     testId: cleanString(match.testId || '', 120),
     stableId: cleanString(match.stableId || '', 120),
     formLabel: cleanString(match.formLabel || '', 120),
+    ...(validAutoMatch(match.autoEvidence) ? { autoEvidence: NoWayAuto.evidenceMatch(match.autoEvidence) } : {}),
   };
 }
 
@@ -1019,7 +1077,7 @@ function normalizeImportedRule(rule) {
   const label = cleanString(rule.label || 'Imported rule', 120);
   const actionKey = cleanString(rule.actionKey || 'interaction', 60);
   const match = sanitizeMatch(rule.match || {});
-  if (!match.selectors.length && !match.labelNorm && !match.textLabels.length) return null;
+  if (!match.selectors.length && !match.labelNorm && !match.textLabels.length && !match.autoEvidence) return null;
 
   const source = rule.source === 'starter' ? 'starter' : 'learned';
   let kind = rule.kind === 'allow' ? 'allow' : (rule.kind === 'block' ? 'block' : null);
@@ -1104,11 +1162,6 @@ function assertOrigin(origin) {
 function matchPatternFromOrigin(origin) {
   assertOrigin(origin);
   return `${origin}/*`;
-}
-
-function originFromMatchPattern(pattern) {
-  if (!pattern?.endsWith('/*')) return null;
-  return parsePageUrl(pattern.slice(0, -2))?.origin || null;
 }
 
 function contentScriptIds(origin) {
